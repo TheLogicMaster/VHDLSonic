@@ -43,6 +43,7 @@ void Disassembler::disassemble(uint32_t address, int depth, bool jumpTable) {
             return;
 
         if (instruction.opcode == 0x47) { // JMP r
+            // Todo: Support disassembling after variable jumps
             //variableJumps.emplace_back(address);
             return;
         } else if (instruction.opcode == 0x0f) { // BRA
@@ -120,6 +121,20 @@ Instruction Disassembler::disassembleInstruction(uint32_t address) const {
             instruction.assembly += stringFormat(" R%d,R%d,%d", reg1, reg2, immediateRelative);
             break;
         case Indexed:
+            instruction.assembly += " ";
+            if (!(reg2 & 0x8)) {
+                if (reg2 & 0x4)
+                    instruction.assembly += "++";
+                else if (reg2 & 0x2)
+                    instruction.assembly += "--";
+            }
+            instruction.assembly += (reg2 & 1 ? "Y" : "X");
+            if (reg2 & 0x8) {
+                if (reg2 & 0x4)
+                    instruction.assembly += "++";
+                else if (reg2 & 0x2)
+                    instruction.assembly += "--";
+            }
             break;
     }
     return instruction;

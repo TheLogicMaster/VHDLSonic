@@ -48,7 +48,7 @@ int Emulator::run() {
         default:
         case 0x00: // NOP
             break;
-        case 0x01 ... 0x0F:
+        case 0x01 ... 0x0F: // Branch instructions
             {
                 int32_t jump = ingestInt32();
                 switch (opcode) {
