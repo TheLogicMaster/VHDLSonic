@@ -1,17 +1,17 @@
 #include "Disassembler.h"
 
-#include "StringFormat.h"
+#include "Utilities.h"
 
 Disassembler::Disassembler(uint8_t *memory) : memory(memory) {
-    disassemble();
-    build();
+    for (int i = 0; i < 8; i++)
+        disassemble(i * 6, 0, true);
 }
 
-const std::vector<Instruction> &Disassembler::getDisassembled() const {
+const std::list<Instruction> &Disassembler::getDisassembled() const {
     return disassembled;
 }
 
-void Disassembler::disassemble(uint32_t address, int depth) {
+void Disassembler::disassemble(uint32_t address, int depth, bool jumpTable) {
     if (depth > 100)
         return;
 
@@ -21,89 +21,106 @@ void Disassembler::disassemble(uint32_t address, int depth) {
         if (instruction.size == 0 or address + instruction.size - 1 > 0xFFFF)
             return;
 
-        auto it = instructions.end();
-        if (!instructions.empty()) {
+        auto it = disassembled.end();
+        if (!disassembled.empty()) {
             do {
                 it--;
                 if ((*it).address <= end)
                     break;
-            } while (it != instructions.begin());
+            } while (it != disassembled.begin());
             if ((*it).address + (*it).size > address)
                 return;
             it++;
         }
-        instructions.insert(it, instruction);
+        disassembled.insert(it, instruction);
 
-        /*uint8_t instr = instruction.data[0] >> 2;
-        if (instr == 0b011101) { // JMP immediate
-            disassemble(instruction.data[1] << 8 | instruction.data[2], depth + 1);
+        if (instruction.opcode == 0x46) { // JMP addr
+            disassemble(instruction.immediate, depth + 1);
             return;
-        } else if (instr == 0b011110) { // JMP HL
-            variableJumps.emplace_back(address);
+        }
+
+        if (jumpTable)
             return;
-        } else if (instr == 0b011111) { // JR always
-            disassemble(end + 1 + *(int8_t*)&instruction.data[1], depth + 1);
+
+        if (instruction.opcode == 0x47) { // JMP r
+            //variableJumps.emplace_back(address);
             return;
-        } else if (instr == 0b100000 or instr == 0b100001) { // JR conditional
-            disassemble(end + 1 + *(int8_t*)&instruction.data[1], depth + 1);
-        } else if (instr == 0b100110) { // JSR
-            disassemble(instruction.data[1] << 8 | instruction.data[2], depth + 1);
-        } else if (instr == 0b100111) { // RET
+        } else if (instruction.opcode == 0x0f) { // BRA
+            disassemble(end + 1 + *(int32_t*)&instruction.immediate, depth + 1);
             return;
-        }*/
+        } else if (instruction.opcode >= 0x01 && instruction.opcode <= 0x0E) // Conditional branching
+            disassemble(end + 1 + *(int32_t*)&instruction.immediate, depth + 1);
+        else if (instruction.opcode == 0x48) // JSR
+            disassemble(instruction.immediate, depth + 1);
+        else if (instruction.opcode == 0x49 || instruction.opcode == 0x4B || instruction.opcode == 0x00) // RET, RTI, HALT
+            return;
         address = end + 1;
     }
 }
 
-InstructionData Disassembler::disassembleInstruction(uint32_t address) const {
-    uint16_t instr = memory[address];
-    auto type = INSTRUCTIONS[instr >> 2];
-    if (type.text == nullptr)
-        return InstructionData{address, "Invalid"};
-    //uint8_t conditionOrRegister = instr & 0x3;
-    InstructionData instruction{address, type.text, ADDRESSING_MODE_SIZES[type.mode]};
-    for (int i = 0; i < instruction.size; i++)
-        instruction.data[i] = memory[address + i];
+Instruction Disassembler::disassembleInstruction(uint32_t address) const {
+    uint8_t opcode = memory[address];
+    uint8_t reg1 = memory[address + 1] >> 4;
+    uint8_t reg2 = memory[address + 1] & 0xF;
+    uint32_t immediate = reverseWordBytes(*(uint32_t*)&(memory + 2)[address]);
+    int32_t immediateRelative = *(int32_t*)&immediate;
+    uint16_t immediateHalfWord = immediate >> 16;
+    uint8_t immediateByte = immediateHalfWord >> 8;
+    auto type = INSTRUCTIONS[opcode];
 
-    /*switch (type.mode) {
+    if (type.text == nullptr)
+        return Instruction{address, "Invalid"};
+
+    Instruction instruction{address, "", ADDRESSING_MODE_SIZES[type.mode], opcode};
+
+    instruction.immediate = immediate;
+    instruction.opcode = opcode;
+
+    instruction.assembly += stringFormat("$%02x ", opcode);
+    instruction.assembly += stringFormat("$%02x ", memory[address + 1]);
+    if (instruction.size == 2)
+        instruction.assembly += "           ";
+    else if (instruction.size == 3)
+        instruction.assembly += stringFormat("$%02x        ", immediateByte);
+    else if (instruction.size == 4)
+        instruction.assembly += stringFormat("$%04x      ", immediateHalfWord);
+    else if (instruction.size == 6)
+        instruction.assembly += stringFormat("$%08x  ", immediate);
+
+    instruction.assembly += type.text;
+
+    switch (type.mode) {
         case Implied:
             break;
         case Immediate:
-            instruction.assembly += stringFormat("$%02x", instruction.data[1]);
-            break;
-        case Address:
-            instruction.assembly += stringFormat("$%04x", instruction.data[1] << 8 | instruction.data[2]);
+            instruction.assembly += stringFormat(" $%08x", immediate);
             break;
         case Register:
-            instruction.assembly += stringFormat("%c", REGISTERS[conditionOrRegister]);
-            break;
-        case ImmediateRegister:
-            instruction.assembly += stringFormat("$%02x,%c", instruction.data[1], REGISTERS[conditionOrRegister]);
-            break;
-        case AddressRegister:
-            instruction.assembly += stringFormat("[$%04x],%c", instruction.data[1] << 8 | instruction.data[2], REGISTERS[conditionOrRegister]);
+            instruction.assembly += stringFormat(" R%d", reg1);
             break;
         case RelativeJump:
-            instruction.assembly += stringFormat("#%d", *(int8_t*)&instruction.data[1]);
+            instruction.assembly += stringFormat(" %d", immediateRelative);
             break;
-        case RelativeJumpCondition:
-            instruction.assembly += stringFormat("#%d,%c", *(int8_t*)&instruction.data[1], CONDITIONS[conditionOrRegister]);
+        case RegisterImmediate:
+            instruction.assembly += stringFormat(" R%d,$%08x", reg1, immediate);
             break;
-        case RelativeJumpInverseCondition:
-            instruction.assembly += stringFormat("#%d,n%c", *(int8_t*)&instruction.data[1], CONDITIONS[conditionOrRegister]);
+        case RegisterImmediateHalfWord:
+            instruction.assembly += stringFormat(" $%04x", immediateHalfWord);
             break;
-    }*/
-    return instruction;
-}
-
-void Disassembler::build() {
-    disassembled.clear();
-    for (auto & instruction : instructions) {
-        std::string entry = stringFormat("$%04x", instruction.address) + ": ";
-        for (int i = 0; i < 3; i++)
-            entry += stringFormat(i < instruction.size ? "$%02x " : "    ", instruction.data[i]);
-        entry += "  ";
-        entry += instruction.assembly;
-        disassembled.emplace_back(Instruction{instruction.address, instruction.size, entry});
+        case RegisterImmediateByte:
+            instruction.assembly += stringFormat(" $%02x", immediateByte);
+            break;
+        case RegisterAddress:
+            instruction.assembly += stringFormat(" R%d,[$%08x]", reg1, immediate);
+            break;
+        case RegisterRegister:
+            instruction.assembly += stringFormat(" R%d,R%d", reg1, reg2);
+            break;
+        case Relative:
+            instruction.assembly += stringFormat(" R%d,R%d,%d", reg1, reg2, immediateRelative);
+            break;
+        case Indexed:
+            break;
     }
+    return instruction;
 }

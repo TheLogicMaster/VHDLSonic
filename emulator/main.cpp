@@ -544,7 +544,7 @@ static void displayDisassembly() {
             if (previousEnd != -1 and previousEnd < instruction.address)
                 ImGui::TextUnformatted("----------------------------------");
             ImGui::PushStyleColor(ImGuiCol_Text, emulator->getPC() == instruction.address ? *flagColor : *windowColor);
-            ImGui::TextUnformatted(instruction.text.c_str());
+            ImGui::TextUnformatted(instruction.assembly.c_str());
             ImGui::PopStyleColor();
             if (emulator->getPC() == instruction.address and disassemblerJumpToPC)
                 ImGui::SetScrollHereY();

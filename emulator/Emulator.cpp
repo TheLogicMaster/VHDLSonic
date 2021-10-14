@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include "Emulator.h"
+#include "Utilities.h"
 
 Emulator::Emulator() {
     srand(time(nullptr));
@@ -448,9 +449,9 @@ uint8_t Emulator::getStatus() const {
 uint32_t Emulator::readUint32(uint32_t address) {
     switch (address) {
         case 0x00000 ... 0x0FFFF - 3:
-            return reverseBytes(*(uint32_t*)&rom[address]);
+            return reverseWordBytes(*(uint32_t*)&rom[address]);
         case 0x10000 ... 0x1FFFF - 3:
-            return reverseBytes(*(uint32_t*)&ram[address - 0x10000]);
+            return reverseWordBytes(*(uint32_t*)&ram[address - 0x10000]);
         case 0x20000:
             return interruptEnable;
         case 0x20001:
@@ -465,7 +466,7 @@ void Emulator::writeUint32(uint32_t address, uint32_t value) {
     // Todo: Fix accesses to first word of RAM in byte or half-word instructions?
     switch (address) {
         case 0x10000 ... 0x1FFFF - 3:
-            *(uint32_t*)&ram[address - 0x10000] = reverseBytes(value);
+            *(uint32_t*)&ram[address - 0x10000] = reverseWordBytes(value);
             break;
         case 0x20000:
             interruptEnable = value;
@@ -482,17 +483,6 @@ void Emulator::writeUint32(uint32_t address, uint32_t value) {
                 printBuffer.erase(0, 1);
             break;
     }
-}
-
-uint32_t Emulator::reverseBytes(uint32_t value) {
-    auto *valuePtr = (uint8_t*)&value;
-    uint32_t result;
-    auto *resultPtr = (uint8_t*)&result;
-    resultPtr[0] = valuePtr[3];
-    resultPtr[1] = valuePtr[2];
-    resultPtr[2] = valuePtr[1];
-    resultPtr[3] = valuePtr[0];
-    return result;
 }
 
 uint16_t Emulator::readUint16(uint32_t address) {
