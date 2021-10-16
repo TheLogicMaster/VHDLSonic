@@ -1,0 +1,56 @@
+<idea-plugin>
+
+  <!-- Unique id for this plugin. Must stay constant for the life of the plugin. -->
+  <id>com.thelogicmaster.vhdl_sonic</id>
+
+  <!-- Text to display as name on Preferences/Settings | Plugin page -->
+  <name>VHDLSonic Assembly</name>
+
+  <!-- Product and plugin compatibility requirements -->
+  <depends>com.intellij.modules.platform</depends>
+  <depends>com.intellij.modules.python</depends>
+
+  <!-- Text to display as description on Preferences/Settings | Plugin page -->
+  <description>
+    <![CDATA[
+      Support for the custom VHDLSonic Assembly assembly language.
+    ]]>
+  </description>
+  <change-notes>
+    <![CDATA[
+      <ul>
+        <li><b>1.0</b> Initial release</li>
+      </ul>
+    ]]>
+  </change-notes>
+
+  <!-- Text to display as company information on Preferences/Settings | Plugin page -->
+  <vendor url="https://thelogicmaster.com">TheLogicMaster</vendor>
+
+  <actions>
+    <action id="NewAssemblyFile" class="com.thelogicmaster.vhdl_sonic.AssemblyFileCreateAction"/>
+  </actions>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <applicationService serviceImplementation="com.thelogicmaster.vhdl_sonic.AssemblySettingsState"/>
+    <applicationConfigurable parentId="tools" instance="com.thelogicmaster.vhdl_sonic.AssemblySettingsConfigurable"
+                             id="com.thelogicmaster.vhdl_sonic.AssemblySettingsConfigurable" displayName="Custom Assembly Settings"/>
+    <editorNotificationProvider implementation="com.thelogicmaster.vhdl_sonic.AssemblyNotificationProvider"/>
+    <fileType name="Assembly File" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblyFileType" fieldName="INSTANCE" language="Assembly" extensions="asm"/>
+    <lang.parserDefinition language="Assembly" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblyParserDefinition"/>
+    <lang.syntaxHighlighterFactory language="Assembly" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblySyntaxHighlighterFactory"/>
+    <colorSettingsPage implementation="com.thelogicmaster.vhdl_sonic.AssemblyColorSettingsPage"/>
+    <annotator language="Assembly" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblyAnnotator"/>
+    <runLineMarkerContributor language="Assembly" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblyRunLineMarkerContributor"/>
+    <completion.contributor language="Assembly" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblyCompletionContributor"/>
+    <psi.referenceContributor language="Assembly" implementation="com.thelogicmaster.vhdl_sonic.AssemblyReferenceContributor"/>
+    <lang.refactoringSupport language="Assembly" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblyRefactoringSupportProvider"/>
+    <lang.findUsagesProvider language="Assembly" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblyFindUsagesProvider"/>
+    <lang.psiStructureViewFactory language="Assembly" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblyStructureViewFactory"/>
+    <lang.formatter language="Assembly" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblyFormattingModelBuilder"/>
+    <lang.commenter language="Assembly" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblyCommenter"/>
+    <lang.documentationProvider language="Assembly" implementationClass="com.thelogicmaster.vhdl_sonic.AssemblyDocumentationProvider"/>
+    <runConfigurationProducer implementation="com.thelogicmaster.vhdl_sonic.AssemblyRunConfigurationProducer"/>
+  </extensions>
+
+</idea-plugin>
