@@ -11,7 +11,6 @@ Emulator::Emulator() {
     srand(time(nullptr));
     rom = memory;
     ram = memory + 0x10000;
-    registers[15] = 0x20000;
 }
 
 void Emulator::load(uint8_t *romData, long size) {
@@ -25,16 +24,16 @@ int Emulator::run() {
         return 0;
     }
 
-    if (status & FLAG_I && interruptFlags & interruptEnable) {
+    if ((status & FLAG_I && interruptFlags & interruptEnable) || interruptFlags & 2) {
         uint8_t interrupt;
         for (interrupt = 1; interrupt < 8; interrupt++)
-            if (interruptFlags & interruptEnable & (1 << interrupt))
+            if (interruptFlags & (interruptEnable | 2) & (1 << interrupt))
                 break;
         interruptFlags &= ~(1 << interrupt);
-        registers[15] -= 1;
         writeUint8(registers[15], status);
-        registers[15] -= 4;
+        registers[15] += 1;
         writeUint32(registers[15], pc);
+        registers[15] += 4;
         pc = interrupt * 6;
         setFlag(FLAG_I, false);
         return 0;
@@ -194,11 +193,11 @@ int Emulator::run() {
             break;
         case 0x26: // MUL r,imm
             getOpReg1(instruction) = getOpReg1(instruction) * ingestUint32();
-            setFlag(FLAG_Z, getOpReg1(instruction));
+            setFlag(FLAG_Z, !getOpReg1(instruction));
             break;
         case 0x27: // MUL r,r
             getOpReg1(instruction) = getOpReg1(instruction) * getOpReg2(instruction);
-            setFlag(FLAG_Z, getOpReg1(instruction));
+            setFlag(FLAG_Z, !(instruction));
             break;
         case 0x28: // ADD r,imm
             getOpReg1(instruction) = performADD(getOpReg1(instruction), ingestUint32());
@@ -219,34 +218,34 @@ int Emulator::run() {
             getOpReg1(instruction) = performSUB(getOpReg1(instruction), getOpReg2(instruction));
             break;
         case 0x2E: // SBC r,imm
-            getOpReg1(instruction) = performSUB(getOpReg1(instruction), ingestUint32() + (bool)(status & FLAG_C));
+            getOpReg1(instruction) = performSUB(getOpReg1(instruction), ingestUint32() + !(status & FLAG_C));
             break;
         case 0x2F: // SBC r,r
-            getOpReg1(instruction) = performSUB(getOpReg1(instruction), getOpReg2(instruction) + (bool)(status & FLAG_C));
+            getOpReg1(instruction) = performSUB(getOpReg1(instruction), getOpReg2(instruction) + !(status & FLAG_C));
             break;
         case 0x30: // AND r,imm
             getOpReg1(instruction) = getOpReg1(instruction) & ingestUint32();
-            setFlag(FLAG_Z, getOpReg1(instruction));
+            setFlag(FLAG_Z, !getOpReg1(instruction));
             break;
         case 0x31: // AND r,r
             getOpReg1(instruction) = getOpReg1(instruction) & getOpReg2(instruction);
-            setFlag(FLAG_Z, getOpReg1(instruction));
+            setFlag(FLAG_Z, !getOpReg1(instruction));
             break;
         case 0x32: // OR r,imm
             getOpReg1(instruction) = getOpReg1(instruction) | ingestUint32();
-            setFlag(FLAG_Z, getOpReg1(instruction));
+            setFlag(FLAG_Z, !getOpReg1(instruction));
             break;
         case 0x33: // OR r,r
             getOpReg1(instruction) = getOpReg1(instruction) | getOpReg2(instruction);
-            setFlag(FLAG_Z, getOpReg1(instruction));
+            setFlag(FLAG_Z, !getOpReg1(instruction));
             break;
         case 0x34: // XOR r,imm
             getOpReg1(instruction) = getOpReg1(instruction) ^ ingestUint32();
-            setFlag(FLAG_Z, getOpReg1(instruction));
+            setFlag(FLAG_Z, !getOpReg1(instruction));
             break;
         case 0x35: // XOR r,r
             getOpReg1(instruction) = getOpReg1(instruction) ^ getOpReg2(instruction);
-            setFlag(FLAG_Z, getOpReg1(instruction));
+            setFlag(FLAG_Z, !getOpReg1(instruction));
             break;
         case 0x36: // CMP r,imm
             performSUB(getOpReg1(instruction), ingestUint32());
@@ -291,12 +290,12 @@ int Emulator::run() {
             setFlag(FLAG_C, false);
             break;
         case 0x44: // PUSH r
-            registers[15] -= 4;
             writeUint32(registers[15], getOpReg1(instruction));
+            registers[15] += 4;
             break;
         case 0x45: // POP r
+            registers[15] -= 4;
             getOpReg1(instruction) = readUint32(registers[15]);
-            registers[15] += 4;
             break;
         case 0x46: // JMP addr
             pc = ingestUint32();
@@ -305,22 +304,22 @@ int Emulator::run() {
             pc = getOpReg1(instruction);
             break;
         case 0x48: // JSR addr
-            registers[15] -= 4;
             writeUint32(registers[15], pc + 4);
+            registers[15] += 4;
             pc = ingestUint32();
             break;
         case 0x49: // RET
+            registers[15] -= 4;
             pc = readUint32(registers[15]);
-            registers[15] += 4;
             break;
         case 0x4A: // INT imm
             interruptFlags |= 1 << ingestUint32();
             break;
-        case 0x4B: // RTI
+        case 0x4B: //
+            registers[15] -= 4;
             pc = readUint32(registers[15]);
-            registers[15] += 4;
+            registers[15] -= 1;
             status = readUint8(registers[15]);
-            registers[15] += 1;
             break;
         case 0x4C: // Halt
             return 1;
@@ -337,8 +336,7 @@ void Emulator::reset() {
     memset(ram, 0, 0x10000);
     memset(lights, 0, 10);
     memset(sevenSegmentDisplays, 0, 6);
-    memset(registers, 0, 15 * 4);
-    registers[15] = 0x20000;
+    memset(registers, 0, 16 * 4);
     for (int i = 0; i < 36; i++)
         if (gpioOutput[i])
             gpio[i] = false;
@@ -557,31 +555,31 @@ uint32_t Emulator::performADD(uint32_t reg, uint32_t value) {
     uint32_t result = reg + value;
     setFlag(FLAG_Z, !result);
     setFlag(FLAG_C, value + reg > 0xFF);
-    setFlag(FLAG_N, result & 0x80);
-    setFlag(FLAG_V, (reg & 0x80) == (value & 0x80) and (reg & 0x80) != (result & 0x80));
+    setFlag(FLAG_N, result & 0x80000000);
+    setFlag(FLAG_V, (reg & 0x80000000) == (value & 0x80000000) and (reg & 0x80000000) != (result & 0x80000000));
     return result;
 }
 
 uint32_t Emulator::performSUB(uint32_t reg, uint32_t value) {
     uint32_t result = reg - value;
     setFlag(FLAG_Z, !result);
-    setFlag(FLAG_C, value > reg);
-    setFlag(FLAG_N, result & 0x80);
-    setFlag(FLAG_V, (reg & 0x80) == (value & 0x80) and (reg & 0x80) != (result & 0x80));
+    setFlag(FLAG_C, value <= reg);
+    setFlag(FLAG_N, result & 0x80000000);
+    setFlag(FLAG_V, (reg ^ result) & (~value ^ result) & 0x80000000);
     return result;
 }
 
 uint32_t Emulator::performLSL(uint32_t reg, uint32_t value) {
     setFlag(FLAG_C, (reg << (value - 1)) & 0x80000000);
     uint32_t result = reg << value;
-    setFlag(FLAG_Z, result);
+    setFlag(FLAG_Z, !result);
     return result;
 }
 
 uint32_t Emulator::performLSR(uint32_t reg, uint32_t value) {
     setFlag(FLAG_C, (reg >> (value - 1)) & 0x1);
     uint32_t result = reg >> value;
-    setFlag(FLAG_Z, result);
+    setFlag(FLAG_Z, !result);
     return result;
 }
 
@@ -589,6 +587,6 @@ uint32_t Emulator::performASR(uint32_t reg, uint32_t value) {
     setFlag(FLAG_C, (reg >> (value - 1)) & 0x1);
     int32_t signedResult = (*(int32_t*)&reg) >> value;
     uint32_t result = *(uint32_t*)&signedResult;
-    setFlag(FLAG_Z, result);
+    setFlag(FLAG_Z, !result);
     return result;
 }

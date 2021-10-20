@@ -388,14 +388,19 @@ def parse_file():
             else:
                 error("Invalid parameters")
 
-        elif instr == "db":
+        elif instr == "db" or instr == "dw" or instr == "dd":
             if len(params) == 0:
                 error("Parameters are required")
             for param in params:
                 const = parse_constant(param)
                 if const is not None:
-                    output_byte(const)
-                elif param.startswith("\""):
+                    if instr == "db":
+                        output_byte(const)
+                    elif instr == "dw":
+                        output_half_word(const)
+                    else:
+                        output_word(const)
+                elif param.startswith("\"") and instr == "db":
                     for byte in param[1:-1].encode().decode("unicode-escape").encode():
                         output_byte(byte)
                 else:

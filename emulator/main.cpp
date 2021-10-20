@@ -539,7 +539,7 @@ static void displayDisassembly() {
     ImGui::Begin("Disassembly", &showDisassembly);
     ImGui::BeginChild("DisassemblyView", ImVec2(ImGui::GetWindowWidth() - 10, ImGui::GetWindowHeight() - 60), true);
     if (disassembler) {
-        int previousEnd = -1;
+        long previousEnd = -1;
         for (const auto &instruction: disassembler->getDisassembled()) {
             if (previousEnd != -1 and previousEnd < instruction.address)
                 ImGui::TextUnformatted("----------------------------------");

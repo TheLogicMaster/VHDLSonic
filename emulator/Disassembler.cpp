@@ -77,6 +77,8 @@ Instruction Disassembler::disassembleInstruction(uint32_t address) const {
     instruction.immediate = immediate;
     instruction.opcode = opcode;
 
+    instruction.assembly += stringFormat("$%05x: ", instruction.address);
+
     instruction.assembly += stringFormat("$%02x ", opcode);
     instruction.assembly += stringFormat("$%02x ", memory[address + 1]);
     if (instruction.size == 2)
