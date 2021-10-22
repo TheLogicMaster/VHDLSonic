@@ -123,7 +123,7 @@ Instruction Disassembler::disassembleInstruction(uint32_t address) const {
             instruction.assembly += stringFormat(" R%d,R%d,%d", reg1, reg2, immediateRelative);
             break;
         case Indexed:
-            instruction.assembly += " ";
+            instruction.assembly += stringFormat(" R%d,", reg1);
             if (!(reg2 & 0x8)) {
                 if (reg2 & 0x4)
                     instruction.assembly += "++";

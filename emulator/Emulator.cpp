@@ -24,6 +24,8 @@ int Emulator::run() {
         return 0;
     }
 
+    gpu.update();
+
     if ((status & FLAG_I && interruptFlags & interruptEnable) || interruptFlags & 2) {
         uint8_t interrupt;
         for (interrupt = 1; interrupt < 8; interrupt++)
@@ -346,6 +348,11 @@ void Emulator::reset() {
             arduinoIO[i] = false;
     memset(arduinoOutput, 0, 16);
     std::queue<uint8_t>().swap(uartInBuffer);
+    gpu.reset();
+}
+
+uint8_t *Emulator::getDisplayBuffer() {
+    return gpu.getDisplayBuffer();
 }
 
 std::string &Emulator::getPrintBuffer() {
@@ -454,6 +461,8 @@ uint32_t Emulator::readUint32(uint32_t address) {
             return interruptEnable;
         case 0x20001:
             return interruptFlags;
+        case 0x30000 ... 0x3FFFF:
+            return gpu.read((address - 0x30000) / 4);
         default:
             return 0;
     }
@@ -479,6 +488,9 @@ void Emulator::writeUint32(uint32_t address, uint32_t value) {
             printBuffer.push_back(*(char*)&value);
             if (printBuffer.length() > PRINT_BUFFER)
                 printBuffer.erase(0, 1);
+            break;
+        case 0x30000 ... 0x3FFFF:
+            gpu.write((address - 0x30000) / 4, value);
             break;
     }
 }
@@ -590,3 +602,4 @@ uint32_t Emulator::performASR(uint32_t reg, uint32_t value) {
     setFlag(FLAG_Z, !result);
     return result;
 }
+

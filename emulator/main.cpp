@@ -39,7 +39,7 @@ static GLuint displayTexture;
 static bool exited = false;
 
 static bool showDisplay = true;
-static int displayScale = 3;
+static int displayScale = 1;
 static bool showProcessor = false;
 static bool showPrintLog = true;
 static bool showIO = true;
@@ -260,7 +260,7 @@ static void displayScreen() {
         ImGui::EndPopup();
     }
 
-    ImGui::Image((ImTextureID)(intptr_t)displayTexture, ImVec2(DISPLAY_WIDTH * displayScale, DISPLAY_HEIGHT * displayScale));
+    ImGui::Image((ImTextureID)(intptr_t)displayTexture, ImVec2(DISPLAY_WIDTH * displayScale / 2., DISPLAY_HEIGHT * displayScale / 2.));
 
     // Options button
     if (ImGui::Button("Options"))
@@ -670,13 +670,13 @@ static void mainLoop(void *arg) {
     runEmulator();
 
     // Update display texture from buffer
-    /*glBindTexture(GL_TEXTURE_2D, displayTexture);
+    glBindTexture(GL_TEXTURE_2D, displayTexture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, DISPLAY_WIDTH, DISPLAY_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, emulator->getDisplayBuffer());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glBindTexture(GL_TEXTURE_2D, 0);*/
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     // Draw windows
     displayMainMenuBar();

@@ -8,12 +8,7 @@ import re
 import subprocess
 import shlex
 
-constants = {
-    "ie": 0x20000,
-    "if": 0x20001,
-    "serial": 0x20002
-}
-
+constants = {}
 line_number = 0
 file = ""
 output = bytearray()

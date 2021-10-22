@@ -3,9 +3,7 @@
 
 #include <cstdint>
 #include <queue>
-
-#define DISPLAY_WIDTH 160
-#define DISPLAY_HEIGHT 128
+#include "GPU.h"
 
 #define PRINT_BUFFER 10000
 
@@ -22,6 +20,7 @@ public:
     int run();
     void reset();
 
+    uint8_t *getDisplayBuffer();
     std::string &getPrintBuffer();
     void uartReceive(char* bytes, uint8_t length);
     bool& getSwitch(int id);
@@ -48,6 +47,8 @@ public:
     uint8_t getStatus() const;
 
 private:
+    GPU gpu{};
+
     bool switches[10]{};
     bool lights[10]{};
     bool buttons[2]{};

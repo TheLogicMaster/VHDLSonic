@@ -9,6 +9,10 @@
     jmp 0
     jmp 0
 
+
+    include "libraries/Sonic.asm"
+
+
 message: db "Hello World!\n",0
 
 main:

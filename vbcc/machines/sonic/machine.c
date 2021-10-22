@@ -101,9 +101,10 @@ static struct Typ ityp = {INT};
 static char memory_suffixes[5] = {'E', 'b', 'w', 'E', 'r'};
 
 // IO port definitions
-#define PORT_COUNT 3
-static char *port_names[PORT_COUNT] = {"IE", "IF", "Serial"};
-static unsigned int port_map[PORT_COUNT] = {0x20000, 0x20001, 0x20002};
+#define PORT_COUNT 13
+static char *port_names[PORT_COUNT] = {
+    "IE", "IF", "Serial", "Render", "H_Scroll", "V_Scroll", "Window_X", "Window_Y", "Palette", "Tile_Data", "BG_Data", "Win_Data", "Sprites"
+};
 
 // Interrupts
 #define INTERRUPT_COUNT 8
@@ -156,12 +157,12 @@ void ensure_section(FILE *f, int dataSection) {
     section = dataSection;
 }
 
-// Returns the address of a port if found otherwise zero
-unsigned int check_port(char *name) {
+// Returns the index of a port if found otherwise -1
+int check_port(char *name) {
     for (int i = 0; i < PORT_COUNT; i++)
         if (!strcmp(name, port_names[i]))
-            return port_map[i];
-    return 0;
+            return i;
+    return -1;
 }
 
 // Returns the id of an interrupt if name is valid
@@ -183,17 +184,31 @@ void header(FILE *f) {
     emit(f, "; Interrupt vector jump table\n");
     emit(f, "\tjmp __initialize\n");
     for (int i = 1; i < INTERRUPT_COUNT; i++)
-        emit(f, "\tjmp %s\n", interrupt_names[i]);
+        emit(f, "\tjmp _%s\n", interrupt_names[i]);
     emit(f, "\n");
 
+    emit(f, "\tinclude \"libraries/Sonic.asm\"\n");
+    emit(f, "\tinclude \"libraries/Graphics.asm\"\n");
     emit(f, "\tinclude \"libraries/Math.asm\"\n\n");
 
-    emit(f, "reset:\n");
+    emit(f, "_reset:\n");
     emit(f, "\tint 0\n\n");
 
-    emit(f, "error:\n");
+    emit(f, "_error:\n");
     emit(f, "\tint 1\n");
     emit(f, "\tret\n\n");
+
+    emit(f, "_memcpy:\n");
+    emit(f, "\tldr x,sp,-12\n");
+    emit(f, "\tldr y,sp,-8\n");
+    emit(f, "\tldr r0,sp,-16\n");
+    emit(f, "\tadd r0,x\n");
+    emit(f, "memcpy_loop_:\n");
+    emit(f, "\tldb r1,x++\n");
+    emit(f, "\tstb r1,y++\n");
+    emit(f, "\tcmp r0,x\n");
+    emit(f, "\tbne memcpy_loop_\n");
+    emit(f, "\tret\n");
 
     ensure_section(f, 1);
     emit(f, "\tvar[4] ; Pad by one word to prevent memory boundary issue\n");
@@ -209,6 +224,8 @@ void load_address(FILE *f, int reg, obj o) {
     } else {
         if (o.v->storage_class == STATIC)
             emit(f, "\tldr r%i,label%i\n", reg, o.v->offset);
+        else if (check_port(o.v->identifier) >= 0)
+            emit(f, "\tldr r%i,{%s}\n", reg, o.v->identifier);
         else
             emit(f, "\tldr r%i,_%s\n", reg, o.v->identifier);
         if (o.val.vmax)
@@ -242,9 +259,8 @@ int get_param_reg(FILE *f, int size, int tempReg, obj q) {
         else if (q.v->storage_class == STATIC)
             emit(f, "\tld%c r%i,[label%i]\n", memory_suffixes[size], tempReg, q.v->offset);
         else {
-            unsigned int port = check_port(q.v->identifier);
-            if (port)
-                emit(f, "\tld%c r%i,[$%x]\n", memory_suffixes[size], tempReg, port);
+            if (check_port(q.v->identifier) >= 0)
+                emit(f, "\tld%c r%i,[{%s}]\n", memory_suffixes[size], tempReg, q.v->identifier);
             else
                 emit(f, "\tld%c r%i,[_%s]\n", memory_suffixes[size], tempReg, q.v->identifier);
         }
@@ -280,9 +296,8 @@ void store_reg(FILE *f, int size, int reg, obj z) {
         else if (z.v->storage_class == STATIC)
             emit(f, "\tst%c r%i,[label%i]\n", memory_suffixes[size], reg, z.v->offset);
         else {
-            unsigned int port = check_port(z.v->identifier);
-            if (port)
-                emit(f, "\tst%c r%i,[$%x]\n", memory_suffixes[size], reg, port);
+            if (check_port(z.v->identifier) >= 0)
+                emit(f, "\tst%c r%i,[{%s}]\n", memory_suffixes[size], reg, z.v->identifier);
             else
                 emit(f, "\tst%c r%i,[_%s]\n", memory_suffixes[size], reg, z.v->identifier);
         }
@@ -482,7 +497,7 @@ void gen_var_head(FILE *f, struct Var *v) {
     // Todo: Exclude list of built-in subroutines
     header(f);
 
-    if (ISFUNC(v->vtyp->flags) || (v->storage_class == EXTERN && check_port(v->identifier)))
+    if (ISFUNC(v->vtyp->flags) || (v->storage_class == EXTERN && check_port(v->identifier) >= 0))
         return;
 
     lastVarHeadVar = v;
@@ -610,7 +625,7 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
         emit(f, "__int%i:\n", interrupt);
 
     emit(f, "; Function \"%s\"\n", func->identifier);
-    emit(f, "%s:\n", func->identifier);
+    emit(f, "_%s:\n", func->identifier);
 
     printf("%s\n", func->identifier);
     printiclist(stdout, firstIC);
@@ -953,7 +968,7 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                         emit(f, "\tadd sp,%i\n", pushedargsize(ic));
                     pushed = 0;
                     emit(f, "; Call Function \"%s\"\n", ic->q1.v->identifier);
-                    emit(f, "\tjsr %s\n", ic->q1.v->identifier);
+                    emit(f, "\tjsr _%s\n", ic->q1.v->identifier);
                     emit(f, "\tsub sp,%i\n", pushedargsize(ic));
                     emit(f, "\tsub fp,%i\n\n", zm2l(stackframe) + pushedargsize(ic) + 4);
                 }
@@ -993,13 +1008,13 @@ void cleanup_cg(FILE *f) {
 
     emit(f, "__initialize:\n");
 
-    emit(f, "; Clear memory\n");
-    emit(f, "\tldr x,$10000\n");
-    emit(f, "\tldb r0,0\n");
-    emit(f, "__clear_mem_loop:\n");
-    emit(f, "\tstr r0,x++\n");
-    emit(f, "\tcmp x,$20000\n");
-    emit(f, "\tbne __clear_mem_loop\n\n");
+    // emit(f, "; Clear memory\n");
+    // emit(f, "\tldr x,$10000\n");
+    // emit(f, "\tldb r0,0\n");
+    // emit(f, "__clear_mem_loop:\n");
+    // emit(f, "\tstr r0,x++\n");
+    // emit(f, "\tcmp x,$20000\n");
+    // emit(f, "\tbne __clear_mem_loop\n\n");
 
     emit(f, "; Static variable initialization\n");
     char *previousVariable = NULL;
@@ -1022,7 +1037,7 @@ void cleanup_cg(FILE *f) {
 
     emit(f, "; Run main function\n");
     emit(f, "\tldr sp,__stack\n");
-    emit(f, "\tjmp main\n\n");
+    emit(f, "\tjmp _main\n\n");
 
     emit(f, "; Static variable initialization data\n");
     previousVariable = NULL;
@@ -1042,7 +1057,7 @@ void cleanup_cg(FILE *f) {
     emit(f, "; Unused interrupt vectors\n");
     for (int i = 1; i < INTERRUPT_COUNT; i++)
         if (!interrupts[i])
-            emit(f, "%s:\n", interrupt_names[i]);
+            emit(f, "_%s:\n", interrupt_names[i]);
     emit(f, "\tbra -6\n\n");
 
     ensure_section(f, 1);
