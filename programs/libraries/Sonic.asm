@@ -4,8 +4,7 @@
     def ie=$20000
     def if=$20001
 
-; Microcontroller ports
-    def serial=$20002
+    def random=$20002
 
 ; Graphics ports
     def render=$30000
@@ -18,3 +17,7 @@
     def bg_data=$38054
     def win_data=$3C054
     def sprites=$3D314
+
+; Microcontroller ports
+    def serial=$40000
+    def gpio=$40004

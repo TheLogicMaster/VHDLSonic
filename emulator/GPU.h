@@ -4,6 +4,9 @@
 #define DISPLAY_WIDTH 320
 #define DISPLAY_HEIGHT 240
 
+#define HBLANK (96 + 48 + 16)
+#define VBLANK (10 + 2 + 33)
+
 #define DISPLAY_UPDATE_CYCLES 4
 
 #define PALETTE_SIZE 16
@@ -78,7 +81,7 @@ public:
     void write(uint32_t address, uint32_t value);
 
 private:
-    void drawTile(int tile, int tileX, int tileY);
+    void drawTile(int tile, int tileX, int tileY, bool sprite);
     int process();
 
     // Graphics registers

@@ -101,9 +101,9 @@ static struct Typ ityp = {INT};
 static char memory_suffixes[5] = {'E', 'b', 'w', 'E', 'r'};
 
 // IO port definitions
-#define PORT_COUNT 13
+#define PORT_COUNT 15
 static char *port_names[PORT_COUNT] = {
-    "IE", "IF", "Serial", "Render", "H_Scroll", "V_Scroll", "Window_X", "Window_Y", "Palette", "Tile_Data", "BG_Data", "Win_Data", "Sprites"
+    "IE", "IF", "Random", "Serial", "GPIO", "Render", "H_Scroll", "V_Scroll", "Window_X", "Window_Y", "Palette", "Tile_Data", "BG_Data", "Win_Data", "Sprites"
 };
 
 // Interrupts
@@ -198,6 +198,14 @@ void header(FILE *f) {
     emit(f, "\tint 1\n");
     emit(f, "\tret\n\n");
 
+    emit(f, "_sei:\n");
+    emit(f, "\tsei\n");
+    emit(f, "\tret\n\n");
+
+    emit(f, "_cli:\n");
+    emit(f, "\tcli\n");
+    emit(f, "\tret\n\n");
+
     emit(f, "_memcpy:\n");
     emit(f, "\tldr x,sp,-12\n");
     emit(f, "\tldr y,sp,-8\n");
@@ -220,7 +228,7 @@ void header(FILE *f) {
 void load_address(FILE *f, int reg, obj o) {
     if (o.v->storage_class == AUTO || o.v->storage_class == REGISTER) {
         emit(f, "\ttfr r%i,fp\n", reg);
-        emit(f, "\tadd r%i,%i\n", reg, o.v->offset - (o.v->offset < 0 ? 4 - 1 + 4 : 0) + o.val.vmax);
+        emit(f, "\tadd r%i,%i\n", reg, o.v->offset - (o.v->offset < 0 ? 4 - 1 + 8 : 0) + o.val.vmax);
     } else {
         if (o.v->storage_class == STATIC)
             emit(f, "\tldr r%i,label%i\n", reg, o.v->offset);
@@ -255,7 +263,7 @@ int get_param_reg(FILE *f, int size, int tempReg, obj q) {
     } else {
         if (q.v->storage_class == AUTO || q.v->storage_class == REGISTER)
             emit(f, "\tld%c r%i,fp,%i\n", memory_suffixes[size], tempReg,
-                 q.v->offset - (q.v->offset < 0 ? size - 1 + 4 : 0) + q.val.vmax);
+                 q.v->offset - (q.v->offset < 0 ? size - 1 + 8 : 0) + q.val.vmax);
         else if (q.v->storage_class == STATIC)
             emit(f, "\tld%c r%i,[label%i]\n", memory_suffixes[size], tempReg, q.v->offset);
         else {
@@ -292,7 +300,7 @@ void store_reg(FILE *f, int size, int reg, obj z) {
     } else {
         if (z.v->storage_class == AUTO || z.v->storage_class == REGISTER)
             emit(f, "\tst%c r%i,fp,%i\n", memory_suffixes[size], reg,
-                 z.v->offset - (z.v->offset < 0 ? size - 1 + 4 : 0) + z.val.vmax);
+                 z.v->offset - (z.v->offset < 0 ? size - 1 + 8 : 0) + z.val.vmax);
         else if (z.v->storage_class == STATIC)
             emit(f, "\tst%c r%i,[label%i]\n", memory_suffixes[size], reg, z.v->offset);
         else {
@@ -620,22 +628,30 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
     header(f);
     ensure_section(f, 0);
 
+    emit(f, "; Function \"%s\"\n", func->identifier);
     int interrupt = check_interrupts(func->identifier);
     if (interrupt)
         emit(f, "__int%i:\n", interrupt);
-
-    emit(f, "; Function \"%s\"\n", func->identifier);
     emit(f, "_%s:\n", func->identifier);
 
     printf("%s\n", func->identifier);
     printiclist(stdout, firstIC);
     printf("\n");
 
+    emit(f, "\tpush fp\n");
+
+    if (interrupt) {
+        emit(f, "\tpush r0\n");
+        emit(f, "\tpush r1\n");
+        emit(f, "\tpush x\n");
+        emit(f, "\tpush y\n");
+    }
+
     emit(f, "; Load Stack Frame\n");
     emit(f, "\ttfr fp,sp\n");
-    emit(f, "\tadd sp,$%x\n\n", zm2l(stackframe));
+    emit(f, "\tadd sp,%i\n\n", zm2l(stackframe));
 
-    int pushed = 0;
+    int pushed = 0, hasPushed = 0;
 
     struct IC *ic = firstIC;
 
@@ -730,8 +746,9 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                 } else {
                     emit_ic_comment(f, ic);
 
-                    if (!pushed)
+                    if (!hasPushed)
                         emit(f, "\tadd sp,%i\n", pushedargsize(get_next_call(ic)));
+                    hasPushed = 1;
 
                     int offset;
                     if (next_call_has_return(ic))
@@ -858,8 +875,11 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                      ((ztyp(ic) & NU) == (UNSIGNED | INT) ||
                       (ztyp(ic) & NU) == (UNSIGNED | CHAR))) // unsigned (char or short) -> unsigned (int or short)
                     || ((q1typ(ic) & NU) == (UNSIGNED | INT) && (ztyp(ic) & NU) == INT) // unsigned int -> signed int
+                    || (q1typ(ic) & UNSIGNED && (q1typ(ic) & NQ) < INT && (ztyp(ic) & NU) == INT)
                         ) {
-                    // Do nothing
+                    // Just transfter
+                    // Todo: Skip if source and dest are the same
+                    store_reg(f, sizetab[ztyp(ic) & NQ], get_param_reg(f, sizetab[q1typ(ic) & NQ], 1, ic->q1), ic->z);
                 } else if ((q1typ(ic) & NU) == INT &&
                            (ztyp(ic) & NU) == (UNSIGNED | INT)) { // signed int -> unsigned int
                     int reg = get_param_reg(f, sizetab[q1typ(ic) & NQ], 1, ic->q1);
@@ -964,13 +984,11 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                     emit_inline_asm(f, ic->q1.v->fi->inline_asm);
                     emit(f, "\n");
                 } else {
-                    if (!pushed)
-                        emit(f, "\tadd sp,%i\n", pushedargsize(ic));
-                    pushed = 0;
                     emit(f, "; Call Function \"%s\"\n", ic->q1.v->identifier);
+                    pushed = 0;
+                    hasPushed = 0;
                     emit(f, "\tjsr _%s\n", ic->q1.v->identifier);
                     emit(f, "\tsub sp,%i\n", pushedargsize(ic));
-                    emit(f, "\tsub fp,%i\n\n", zm2l(stackframe) + pushedargsize(ic) + 4);
                 }
                 break;
 
@@ -982,7 +1000,18 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
         }
     }
 
-    emit(f, "\tsub sp,$%x\n", zm2l(stackframe));
+    emit(f, "; Return from function \"%s\"\n", func->identifier);
+
+    emit(f, "\tsub sp,%i\n", zm2l(stackframe));
+
+    if (interrupt) {
+        emit(f, "\tpop y\n");
+        emit(f, "\tpop x\n");
+        emit(f, "\tpop r1\n");
+        emit(f, "\tpop r0\n");
+    }
+
+    emit(f, "\tpop fp\n");
 
     if (!strcmp(func->identifier, "main"))
         emit(f, "\thalt\n\n");

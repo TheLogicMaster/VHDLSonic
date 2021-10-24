@@ -61,7 +61,7 @@ struct AddressingMode{
 
 /* size of buffer for asm-output, this can be used to do
    peephole-optimizations of the generated assembly-output */
-#define EMIT_BUF_LEN 2048 /* should be enough */
+#define EMIT_BUF_LEN 4096 /* should be enough */
 /* number of asm-output lines buffered */
 #define EMIT_BUF_DEPTH 8
 

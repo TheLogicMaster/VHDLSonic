@@ -2,8 +2,8 @@
 
     jmp main
     bra -6
-    bra -6
-    bra -6
+    jmp vblank
+    jmp hblank
     bra -6
     bra -6
     bra -6
@@ -18,6 +18,10 @@
 main:
 ; Initialize SP
     ldr sp,stack
+
+    ldr r0,%00001100
+    str r0,{ie}
+    sei
 
     ldr r0,face
     ldr r1,1
@@ -58,6 +62,14 @@ main:
 loop:
 
     bra loop
+
+vblank:
+    inc r8
+    rti
+
+hblank:
+    inc r9
+    rti
 
 face: bin "data/face.bin"
 face_sprite: bin "data/face_sprite.bin"

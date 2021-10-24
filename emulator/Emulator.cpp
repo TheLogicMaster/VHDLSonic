@@ -24,7 +24,7 @@ int Emulator::run() {
         return 0;
     }
 
-    gpu.update();
+    interruptFlags |= gpu.update();
 
     if ((status & FLAG_I && interruptFlags & interruptEnable) || interruptFlags & 2) {
         uint8_t interrupt;
@@ -461,8 +461,12 @@ uint32_t Emulator::readUint32(uint32_t address) {
             return interruptEnable;
         case 0x20001:
             return interruptFlags;
+        case 0x20002:
+            return rand();
         case 0x30000 ... 0x3FFFF:
             return gpu.read((address - 0x30000) / 4);
+        case 0x40004 ... 0x40004 + 36 * 4 - 1:
+            return gpio[(address - 0x40004) / 4];
         default:
             return 0;
     }
@@ -481,16 +485,16 @@ void Emulator::writeUint32(uint32_t address, uint32_t value) {
         case 0x20001:
             interruptFlags = value;
             break;
-        case 0x20002:
+        case 0x30000 ... 0x3FFFF:
+            gpu.write((address - 0x30000) / 4, value);
+            break;
+        case 0x40000: // Serial
             if (value == 0)
                 break;
             std::cout << (char)value << std::flush;
             printBuffer.push_back(*(char*)&value);
             if (printBuffer.length() > PRINT_BUFFER)
                 printBuffer.erase(0, 1);
-            break;
-        case 0x30000 ... 0x3FFFF:
-            gpu.write((address - 0x30000) / 4, value);
             break;
     }
 }

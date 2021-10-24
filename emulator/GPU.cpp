@@ -104,7 +104,7 @@ void GPU::write(uint32_t address, uint32_t value) {
         case SPRITE_ADDRESS ... SPRITE_ADDRESS + SPRITE_COUNT - 1: // Sprite data
             sprites[address - SPRITE_ADDRESS] = {
                     (uint8_t) ((value >> 20) & 0xFF),
-                    (uint8_t) ((value >> 11) & 0x1FF),
+                    (uint16_t) ((value >> 11) & 0x1FF),
                     (uint8_t) ((value >> 2) & 0x1FF),
                     (bool) (value & 2),
                     (bool) (value & 1)
@@ -115,13 +115,16 @@ void GPU::write(uint32_t address, uint32_t value) {
     }
 }
 
-void GPU::drawTile(int tile, int tileX, int tileY) {
+void GPU::drawTile(int tile, int tileX, int tileY, bool sprite) {
     int tileOffset = tileX + tileY * TILE_WIDTH;
     int paletteIndex = (tileData[tile][tileOffset / 2] >> (tileX % 2 ? 0 : 4)) & 0xF;
-    displayBuffer[row][column] = palette[paletteIndex];
+    if (!sprite || paletteIndex)
+        displayBuffer[row][column] = palette[paletteIndex];
 }
 
 int GPU::process() {
+    int interrupts = 0;
+
     if (!render and column < DISPLAY_WIDTH and row < DISPLAY_HEIGHT)
         displayBuffer[row][column] = {};
     else if (column < DISPLAY_WIDTH and row < DISPLAY_HEIGHT) {
@@ -131,12 +134,12 @@ int GPU::process() {
         // Background rendering
         x = column + horizontalScroll;
         if (x < 0)
-            x += DISPLAY_WIDTH;
+            x += WORLD_WIDTH;
         y = row + verticalScroll;
         if (y < 0)
-            y += DISPLAY_HEIGHT;
+            y += WORLD_HEIGHT;
         tile = backgroundData[x / TILE_WIDTH + y / TILE_WIDTH * (WORLD_WIDTH / TILE_WIDTH)];
-        drawTile(tile, x % TILE_WIDTH, y % TILE_WIDTH);
+        drawTile(tile, x % TILE_WIDTH, y % TILE_WIDTH, false);
 
         // Sprite rendering
         x = column + SPRITE_OFFSET;
@@ -164,7 +167,7 @@ int GPU::process() {
             int tileY = spriteY % TILE_WIDTH;
             if (tileY < 0)
                 tileY += TILE_WIDTH;
-            drawTile(tile, tileX, tileY);
+            drawTile(tile, tileX, tileY, true);
         }
 
         // Window rendering
@@ -172,20 +175,21 @@ int GPU::process() {
         y = row - windowY;
         if (x >= 0 and x < DISPLAY_WIDTH and y >= 0 and y < DISPLAY_HEIGHT) {
             tile = windowData[x / TILE_WIDTH + y / TILE_WIDTH * (DISPLAY_WIDTH / TILE_WIDTH)];
-            drawTile(tile, x % TILE_WIDTH, y % TILE_WIDTH);
+            drawTile(tile, x % TILE_WIDTH, y % TILE_WIDTH, false);
         }
     }
 
     column++;
 
-    // Todo: Interrupts
-
-    if (column >= DISPLAY_WIDTH * 2 + (96 + 48 + 16)) {
+    if (column == DISPLAY_WIDTH && row <= DISPLAY_HEIGHT)
+        interrupts |= 0x8;
+    else if (column >= DISPLAY_WIDTH + HBLANK) {
         column = 0;
         row++;
-        if (row >= DISPLAY_HEIGHT * 2 + (10 + 2 + 33)) {
+        if (row == DISPLAY_HEIGHT)
+            interrupts |= 0x4;
+        else if (row >= DISPLAY_HEIGHT + VBLANK)
             row = 0;
-        }
     }
-    return 0;
+    return interrupts;
 }
