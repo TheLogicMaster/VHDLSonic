@@ -156,7 +156,7 @@ jobs:
         shell: bash
         run: |
           cd vbcc
-          echo n | make TARGET=sonic bin/vbccsonic
+          (yes n || true) | make TARGET=sonic bin/vbccsonic
 
       - name: Install Python 3.9
         uses: actions/setup-python@v2
