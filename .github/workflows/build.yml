@@ -1,0 +1,182 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+jobs:
+  Linux:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Get Tag Version
+        id: get_version
+        run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglew-dev libsdl2-dev
+
+      - name: Linux Build
+        run: |
+          mkdir ./emulator/build
+          cd ./emulator/build
+          cmake ..
+          make
+
+      #- name: Install Emscripten Dependencies
+        #run: |
+          #wget -q https://github.com/emscripten-core/emsdk/archive/master.tar.gz
+          #tar -xvf master.tar.gz
+          #emsdk-master/emsdk update
+          #emsdk-master/emsdk install latest
+          #emsdk-master/emsdk activate latest
+
+      #- name: Emscripten Build
+        #run: |
+          #pushd emsdk-master
+          #source ./emsdk_env.sh
+          #popd
+          #make -C ./emulator/Emscripten
+
+      #- name: Assemble programs
+        #run: |
+          #./fetch_songs.sh
+          #./assemble.sh
+
+      - name: Copy Linux Files
+        run: |
+          rm -rf ./Emulator
+          mkdir ./Emulator
+          cp ./emulator/build/Emulator ./Emulator/Emulator.run
+          #cp ./programs/build/*.bin ./Emulator
+          #cp ./assembler.py ./Emulator
+          #cp ./image_convert.py ./Emulator
+          #cp -r ./docs ./Emulator
+
+      - name: Zip Linux Release
+        uses: papeloto/action-zip@v1
+        with:
+          files: ./Emulator
+          dest: linux-${{ steps.get_version.outputs.VERSION }}.zip
+
+      #- name: Copy HTML Files
+        #run: |
+          #rm -rf ./Emulator
+          #mkdir ./Emulator
+          #cp ./emulator/Emscripten/web/* ./Emulator
+          #cp ./programs/build/*.bin ./Emulator
+          #cp -r ./docs ./Emulator
+
+      #- name: Zip HTML Release
+        #uses: papeloto/action-zip@v1
+        #with:
+          #files: ./Emulator
+          #dest: html-${{ steps.get_version.outputs.VERSION }}.zip
+
+      #- name: Deploy Demo
+        #uses: JamesIves/github-pages-deploy-action@3.6.1
+        #with:
+          #GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          #BRANCH: gh-pages
+          #FOLDER: Emulator
+          #CLEAN: true
+        #env:
+          #ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+
+      - name: Build plugin
+        run: |
+          cd ./jetbrains-plugin
+          ./gradlew buildPlugin
+          cp ./build/libs/assembly-plugin-*.jar ../plugin-${{ steps.get_version.outputs.VERSION }}.jar
+
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          hub release edit -a ./linux-${{ steps.get_version.outputs.VERSION }}.zip -m "" ${{ steps.get_version.outputs.VERSION }}
+          #hub release edit -a ./html-${{ steps.get_version.outputs.VERSION }}.zip -m "" ${{ steps.get_version.outputs.VERSION }}
+          hub release edit -a ./plugin-${{ steps.get_version.outputs.VERSION }}.jar -m "" ${{ steps.get_version.outputs.VERSION }}
+
+  Windows:
+    needs: Linux
+    runs-on: windows-2019
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Get Tag Version
+        id: get_version
+        shell: bash
+        run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+
+      - name: Setup MinGW
+        uses: egor-tensin/setup-mingw@v2
+        with:
+          platform: x64
+
+      - name: Get CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Windows Build
+        uses: lukka/run-cmake@v3
+        with:
+          buildDirectory: ./emulator/build
+          cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
+          cmakeListsTxtPath: ./emulator/CMakeLists.txt
+          cmakeAppendedArgs: '-G "CodeBlocks - MinGW Makefiles"'
+          useVcpkgToolchainFile: false
+          buildWithCMake: true
+
+      - name: Install Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      #- name: Assemble programs
+        #shell: bash
+        #run: |
+          #./fetch_songs.sh
+          #./assemble.sh
+
+      - name: Copy Windows Files
+        shell: bash
+        run: |
+          mkdir ./build
+          cp emulator/build/*.exe ./build
+          cp emulator/build/*.dll ./build
+          #cp programs/build/*.bin ./build
+          #cp assembler.py ./build
+          #cp image_convert.py ./build
+          #cp -r docs ./build
+
+      - name: Zip Windows Release
+        uses: papeloto/action-zip@v1
+        with:
+          files: ./build
+          dest: windows-${{ steps.get_version.outputs.VERSION }}.zip
+
+      - name: Upload Windows Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          hub release edit -a windows-${{ steps.get_version.outputs.VERSION }}.zip -m "" ${{ steps.get_version.outputs.VERSION }}
