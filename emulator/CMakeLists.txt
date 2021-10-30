@@ -37,7 +37,7 @@ add_library(imgui STATIC ${IMGUI_SOURCES})
 target_include_directories(imgui PUBLIC ${IMGUI_PATH})
 
 # Compile sources into executable
-add_executable(Emulator main.cpp GPU.h GPU.cpp Emulator.cpp Emulator.h imgui_memory_editor.h imgui_toggle_button.h ImGuiFileDialog.cpp ImGuiFileDialog.h Disassembler.cpp Disassembler.h Utilities.h)
+add_executable(Emulator main.cpp APU.h APU.cpp GPU.h GPU.cpp Emulator.cpp Emulator.h imgui_memory_editor.h imgui_toggle_button.h ImGuiFileDialog.cpp ImGuiFileDialog.h Disassembler.cpp Disassembler.h Utilities.h)
 
 # Link Windows specific libraries
 if (WIN32)

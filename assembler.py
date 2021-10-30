@@ -16,8 +16,11 @@ address = 0
 data_address = 0x10000
 includes = []
 labels = {}
+last_label = None
+last_data_label = None
 label_addresses = {}
 label_jumps = {}
+data_section = False
 
 
 # Print error and current line number before exiting
@@ -38,6 +41,16 @@ def ensure_params(params, num):
 def ensure_output_size(size):
     while len(output) < size:
         output.append(0)
+
+
+# Ensures the current address is aligned correctly
+def ensure_alignment(align):
+    global address
+    label = last_data_label if data_section else last_label
+    while address % align:
+        if label is not None and labels[label] == address:
+            labels[label] = address + 1
+        address = address + 1
 
 
 # Writes a word into the output at the specified location
@@ -127,14 +140,7 @@ def parse_indexed_register(param):
     reg = parse_register(re.sub("[-+]", "", param))
     if reg is None:
         return None
-    reg = reg - 12
-    if "-" in param:
-        reg |= 0x2
-    if "+" in param:
-        reg |= 0x4
-    if param.endswith("+") or param.endswith("-"):
-        reg |= 0x8
-    return reg
+    return reg, param.endswith("+") or param.endswith("-"), "+" in param, "-" in param
 
 
 # Parse a label from a parameter or None if not valid
@@ -162,13 +168,15 @@ def output_location(param):
 
 
 # Output an the register byte of an instruction
-def output_registers(source=0, operand=0):
+def output_registers(source=0, operand=0, pre_post=False, inc=False, dec=False):
     output_byte(source << 4 | operand)
+    output_half_word(pre_post << 15 | inc << 14 | dec << 13)
 
 
 # Output an implicit instruction
 def output_implicit_instr(params, opcode):
     ensure_params(params, 0)
+    ensure_alignment(4)
     output_byte(opcode)
     output_registers()
 
@@ -180,6 +188,7 @@ def output_load_store_instr(params, size, store=False):
     global address
     if len(params) < 2:
         error("Not enough parameters")
+    ensure_alignment(4)
     reg = parse_register(params[0])
     if reg is None:
         error("Invalid register")
@@ -188,12 +197,7 @@ def output_load_store_instr(params, size, store=False):
         if const is not None and not store:
             output_byte(0x10 + size)
             output_registers(reg)
-            if size == 0:
-                output_byte(const)
-            elif size == 1:
-                output_half_word(const)
-            else:
-                output_word(const)
+            output_word(const)
             return
         label = parse_label(params[1])
         if label is not None and not store:
@@ -207,7 +211,7 @@ def output_load_store_instr(params, size, store=False):
         index = parse_indexed_register(params[1])
         if index is not None:
             output_byte((0x1F if store else 0x16) + size)
-            output_registers(reg, index)
+            output_registers(reg, index[0], index[1], index[2], index[3])
             return
         output_byte((0x1C if store else 0x13) + size)
         output_registers(reg)
@@ -228,6 +232,7 @@ def output_load_store_instr(params, size, store=False):
 # base_opcode is for the immediate variant
 def output_arithmetic_instr(params, base_opcode):
     ensure_params(params, 2)
+    ensure_alignment(4)
     source = parse_register(params[0])
     if source is None:
         error("Invalid source register")
@@ -247,6 +252,7 @@ def output_arithmetic_instr(params, base_opcode):
 # Output a single register operand instruction
 def output_register_instr(params, opcode):
     ensure_params(params, 1)
+    ensure_alignment(4)
     reg = parse_register(params[0])
     if reg is None:
         error("Invalid register")
@@ -258,6 +264,7 @@ def output_register_instr(params, opcode):
 def output_branch_instr(params, opcode):
     global address
     ensure_params(params, 1)
+    ensure_alignment(4)
     const = parse_constant(params[0])
     output_byte(opcode)
     output_registers()
@@ -277,6 +284,9 @@ def parse_file():
     global data_address
     global file
     global constants
+    global last_label
+    global last_data_label
+    global data_section
 
     data_section = False
 
@@ -298,6 +308,10 @@ def parse_file():
             if match[1] in labels:
                 error("Duplicate label: " + match[1])
             labels[match[1]] = data_address if data_section else address
+            if data_section:
+                last_data_label = match[1]
+            else:
+                last_label = match[1]
             line = line[len(match[0]):]
 
         # Get instruction
@@ -321,8 +335,8 @@ def parse_file():
                     params[i] = params[i].replace("{" + constant + "}", ("" if type(constants[constant]) is str else "#") + str(constants[constant]))
             params[i] = re.sub(r"^\s+|\s+$", "", params[i])
 
-        if data_section and instr != "var" and instr != "org" and instr != "rodata":
-            error("Only VAR, ORG, and RODATA are permitted in the data section")
+        if data_section and instr != "var" and instr != "org" and instr != "rodata" and instr != "align":
+            error("Only VAR, ORG, ALIGN, and RODATA are permitted in the data section")
 
         if instr == "org":
             ensure_params(params, 1)
@@ -336,6 +350,13 @@ def parse_file():
             else:
                 address = parsed
 
+        elif instr == "align":
+            ensure_params(params, 1)
+            parsed = parse_constant(params[0])
+            if parsed is None:
+                error("Failed to parse alignment")
+            ensure_alignment(parsed)
+
         elif instr == "def":
             ensure_params(params, 1)
             match = re.search(r"^(\w+)=(.+)$", params[0])
@@ -346,6 +367,7 @@ def parse_file():
         elif instr == "include":
             current_line = line_number
             current_file = file
+            current_section = data_section
             ensure_params(params, 1)
             match = re.search(r"^\"(.+)\"$", params[0])
             if not match:
@@ -359,6 +381,7 @@ def parse_file():
                 parse_file()
             except RecursionError:
                 error("Recursive dependencies")
+            data_section = current_section
             file = current_file
             line_number = current_line
 
@@ -478,6 +501,7 @@ def parse_file():
 
         elif instr == "tfr":
             ensure_params(params, 2)
+            ensure_alignment(4)
             reg1 = parse_register(params[0])
             reg2 = parse_register(params[1])
             if reg1 is None or reg2 is None:
@@ -509,16 +533,16 @@ def parse_file():
         elif instr == "xor":
             output_arithmetic_instr(params, 0x34)
 
-        elif instr == "cmp":
+        elif instr == "lsl":
             output_arithmetic_instr(params, 0x36)
 
-        elif instr == "lsl":
+        elif instr == "lsr":
             output_arithmetic_instr(params, 0x38)
 
-        elif instr == "lsr":
+        elif instr == "asr":
             output_arithmetic_instr(params, 0x3A)
 
-        elif instr == "asr":
+        elif instr == "cmp":
             output_arithmetic_instr(params, 0x3C)
 
         elif instr == "inc":
@@ -547,6 +571,7 @@ def parse_file():
 
         elif instr == "jmp":
             ensure_params(params, 1)
+            ensure_alignment(4)
             const = parse_constant(params[0])
             if const is not None:
                 output_byte(0x46)
@@ -568,6 +593,7 @@ def parse_file():
 
         elif instr == "jsr":
             ensure_params(params, 1)
+            ensure_alignment(4)
             const = parse_constant(params[0])
             output_byte(0x48)
             output_registers()
@@ -585,6 +611,7 @@ def parse_file():
 
         elif instr == "int":
             ensure_params(params, 1)
+            ensure_alignment(4)
             const = parse_constant(params[0])
             if const is None:
                 error("Invalid constant")

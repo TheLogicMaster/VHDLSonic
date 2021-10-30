@@ -24,7 +24,7 @@ int Emulator::run() {
         return 0;
     }
 
-    interruptFlags |= gpu.update();
+    interruptFlags |= gpu.update() | apu.update();
 
     if ((status & FLAG_I && interruptFlags & interruptEnable) || interruptFlags & 2) {
         uint8_t interrupt;
@@ -33,17 +33,16 @@ int Emulator::run() {
                 break;
         interruptFlags &= ~(1 << interrupt);
         writeUint8(registers[15], status);
-        registers[15] += 1;
+        registers[15] += 4;
         writeUint32(registers[15], pc);
         registers[15] += 4;
-        pc = interrupt * 6;
+        pc = interrupt * 8;
         setFlag(FLAG_I, false);
         return 0;
     }
 
-    uint16_t instruction = readUint32(pc) >> 16;
-    pc += 2;
-    uint8_t opcode = (instruction & 0xFF00) >> 8;
+    uint32_t instruction = ingestUint32();
+    uint8_t opcode = (instruction & 0xFF000000) >> 24;
 
     switch (opcode) {
         default:
@@ -114,14 +113,6 @@ int Emulator::run() {
                         break;
                 }
             }
-            break;
-        case 0x10: // LDB r,imm
-            getOpReg1(instruction) = ingestUint8();
-            setFlag(FLAG_Z, !getOpReg1(instruction));
-            break;
-        case 0x11: // LDW r,imm
-            getOpReg1(instruction) = ingestUint16();
-            setFlag(FLAG_Z, !getOpReg1(instruction));
             break;
         case 0x12: // LDR r,imm
             getOpReg1(instruction) = ingestUint32();
@@ -249,29 +240,29 @@ int Emulator::run() {
             getOpReg1(instruction) = getOpReg1(instruction) ^ getOpReg2(instruction);
             setFlag(FLAG_Z, !getOpReg1(instruction));
             break;
-        case 0x36: // CMP r,imm
-            performSUB(getOpReg1(instruction), ingestUint32());
-            break;
-        case 0x37: // CMP r,r
-            performSUB(getOpReg1(instruction), getOpReg2(instruction));
-            break;
-        case 0x38: // LSL r,imm
+        case 0x36: // LSL r,imm
             getOpReg1(instruction) = performLSL(getOpReg1(instruction), ingestUint32());
             break;
-        case 0x39: // LSL r,r
+        case 0x37: // LSL r,r
             getOpReg1(instruction) = performLSL(getOpReg1(instruction), getOpReg2(instruction));
             break;
-        case 0x3A: // LSR r,imm
+        case 0x38: // LSR r,imm
             getOpReg1(instruction) = performLSR(getOpReg1(instruction), ingestUint32());
             break;
-        case 0x3B: // LSR r,r
+        case 0x39: // LSR r,r
             getOpReg1(instruction) = performLSR(getOpReg1(instruction), getOpReg2(instruction));
             break;
-        case 0x3C: // ASR r,imm
+        case 0x3A: // ASR r,imm
             getOpReg1(instruction) = performASR(getOpReg1(instruction), ingestUint32());
             break;
-        case 0x3D: // ASR r,r
+        case 0x3B: // ASR r,r
             getOpReg1(instruction) = performASR(getOpReg1(instruction), getOpReg2(instruction));
+            break;
+        case 0x3C: // CMP r,imm
+            performSUB(getOpReg1(instruction), ingestUint32());
+            break;
+        case 0x3D: // CMP r,r
+            performSUB(getOpReg1(instruction), getOpReg2(instruction));
             break;
         case 0x3E: // INC r
             getOpReg1(instruction) = performADD(getOpReg1(instruction), 1);
@@ -317,10 +308,10 @@ int Emulator::run() {
         case 0x4A: // INT imm
             interruptFlags |= 1 << ingestUint32();
             break;
-        case 0x4B: //
+        case 0x4B: // RTI
             registers[15] -= 4;
             pc = readUint32(registers[15]);
-            registers[15] -= 1;
+            registers[15] -= 4;
             status = readUint8(registers[15]);
             break;
         case 0x4C: // Halt
@@ -348,11 +339,17 @@ void Emulator::reset() {
             arduinoIO[i] = false;
     memset(arduinoOutput, 0, 16);
     std::queue<uint8_t>().swap(uartInBuffer);
+
     gpu.reset();
+    apu.reset();
 }
 
 uint8_t *Emulator::getDisplayBuffer() {
     return gpu.getDisplayBuffer();
+}
+
+std::queue<uint8_t> &Emulator::getAudioSamples() {
+    return apu.getSamples();
 }
 
 std::string &Emulator::getPrintBuffer() {
@@ -423,14 +420,6 @@ uint32_t Emulator::getPC() const {
     return pc;
 }
 
-uint32_t Emulator::getX() const {
-    return registers[12];
-}
-
-uint32_t Emulator::getY() const {
-    return registers[13];
-}
-
 uint8_t Emulator::getIE() const {
     return interruptEnable;
 }
@@ -454,9 +443,9 @@ uint8_t Emulator::getStatus() const {
 uint32_t Emulator::readUint32(uint32_t address) {
     switch (address) {
         case 0x00000 ... 0x0FFFF - 3:
-            return reverseWordBytes(*(uint32_t*)&rom[address]);
+            return reverseWordBytes(*(uint32_t*)&rom[address & ~0x3]);
         case 0x10000 ... 0x1FFFF - 3:
-            return reverseWordBytes(*(uint32_t*)&ram[address - 0x10000]);
+            return reverseWordBytes(*(uint32_t*)&ram[address & ~0x3 - 0x10000]);
         case 0x20000:
             return interruptEnable;
         case 0x20001:
@@ -473,11 +462,9 @@ uint32_t Emulator::readUint32(uint32_t address) {
 }
 
 void Emulator::writeUint32(uint32_t address, uint32_t value) {
-    // Todo: Check behavior of write over boundary?
-    // Todo: Fix accesses to first word of RAM in byte or half-word instructions?
     switch (address) {
         case 0x10000 ... 0x1FFFF - 3:
-            *(uint32_t*)&ram[address - 0x10000] = reverseWordBytes(value);
+            *(uint32_t*)&ram[address & ~0x3 - 0x10000] = reverseWordBytes(value);
             break;
         case 0x20000:
             interruptEnable = value;
@@ -500,28 +487,21 @@ void Emulator::writeUint32(uint32_t address, uint32_t value) {
 }
 
 uint16_t Emulator::readUint16(uint32_t address) {
-    return readUint32(address - 2) & 0xFFFF;
+    return readUint32(address & ~0x3) >> (2 - (address & 0x2)) * 8;
 }
 
 void Emulator::writeUint16(uint32_t address, uint16_t value) {
-    writeUint32(address - 2, readUint32(address - 2) & 0xFFFF0000 | value);
+    writeUint32(address & ~0x3,
+                readUint32(address & ~0x3) & 0xFFFF << (address & 0x2) * 8 | value << (2 - (address & 0x2)) * 8);
 }
 
 uint8_t Emulator::readUint8(uint32_t address) {
-    return readUint32(address - 3) & 0xFF;
+    return readUint32(address & ~0x3) >> (3 - (address & 0x3)) * 8;
 }
 
 void Emulator::writeUint8(uint32_t address, uint8_t value) {
-    writeUint32(address - 3, readUint32(address - 3) & 0xFFFFFF00 | value);
-}
-
-uint8_t Emulator::ingestUint8() {
-    return readUint8(pc++);
-}
-
-uint16_t Emulator::ingestUint16() {
-    pc += 2;
-    return readUint16(pc - 2);
+    writeUint32(address & ~0x3,
+                readUint32(address & ~0x3) & ~(0xFF << (3 - (address & 0x3)) * 8) | value << (3 - (address & 0x3)) * 8);
 }
 
 uint32_t Emulator::ingestUint32() {
@@ -534,27 +514,27 @@ int32_t Emulator::ingestInt32() {
     return *(int32_t*)&value;
 }
 
-uint32_t &Emulator::getOpReg1(uint16_t instruction) {
-    return registers[(instruction & 0xF0) >> 4];
+uint32_t &Emulator::getOpReg1(uint32_t instruction) {
+    return registers[(instruction & 0xF00000) >> 20];
 }
 
-uint32_t &Emulator::getOpReg2(uint16_t instruction) {
-    return registers[instruction & 0xF];
+uint32_t &Emulator::getOpReg2(uint32_t instruction) {
+    return registers[(instruction & 0xF0000) >> 16];
 }
 
-uint32_t Emulator::getIndexedAddress(uint16_t instruction, int size) {
-    uint32_t &reg = registers[instruction & 1 ? 13 : 12];
-    if (!(instruction & 0x8)) {
-        if (instruction & 0x4)
+uint32_t Emulator::getIndexedAddress(uint32_t instruction, int size) {
+    uint32_t &reg = getOpReg2(instruction);
+    if (!(instruction & 0x8000)) {
+        if (instruction & 0x4000)
             reg += size;
-        else if (instruction & 0x2)
+        else if (instruction & 0x2000)
             reg -= size;
     }
     uint32_t address = reg;
-    if (instruction & 0x8) {
-        if (instruction & 0x4)
+    if (instruction & 0x8000) {
+        if (instruction & 0x4000)
             reg += size;
-        else if (instruction & 0x2)
+        else if (instruction & 0x2000)
             reg -= size;
     }
     return address;
@@ -586,7 +566,7 @@ uint32_t Emulator::performSUB(uint32_t reg, uint32_t value) {
 }
 
 uint32_t Emulator::performLSL(uint32_t reg, uint32_t value) {
-    setFlag(FLAG_C, (reg << (value - 1)) & 0x80000000);
+    setFlag(FLAG_C, value and (reg << (value - 1)) & 0x80000000);
     uint32_t result = reg << value;
     setFlag(FLAG_Z, !result);
     return result;

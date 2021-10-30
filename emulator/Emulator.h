@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <queue>
 #include "GPU.h"
+#include "APU.h"
 
 #define PRINT_BUFFER 10000
 
@@ -21,6 +22,8 @@ public:
     void reset();
 
     uint8_t *getDisplayBuffer();
+    std::queue<uint8_t> &getAudioSamples();
+
     std::string &getPrintBuffer();
     void uartReceive(char* bytes, uint8_t length);
     bool& getSwitch(int id);
@@ -42,12 +45,11 @@ public:
     uint8_t getIF() const;
     uint32_t getFP() const;
     uint32_t getSP() const;
-    uint32_t getX() const;
-    uint32_t getY() const;
     uint8_t getStatus() const;
 
 private:
     GPU gpu{};
+    APU apu{};
 
     bool switches[10]{};
     bool lights[10]{};
@@ -78,15 +80,13 @@ private:
     uint32_t readUint32(uint32_t address);
     void writeUint32(uint32_t address, uint32_t value);
 
-    uint8_t ingestUint8();
-    uint16_t ingestUint16();
     uint32_t ingestUint32();
     int32_t ingestInt32();
 
-    uint32_t &getOpReg1(uint16_t instruction);
-    uint32_t &getOpReg2(uint16_t instruction);
+    uint32_t &getOpReg1(uint32_t instruction);
+    uint32_t &getOpReg2(uint32_t instruction);
 
-    uint32_t getIndexedAddress(uint16_t instruction, int size);
+    uint32_t getIndexedAddress(uint32_t instruction, int size);
 
     void setFlag(uint8_t flag, bool set);
 

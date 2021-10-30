@@ -34,6 +34,7 @@
 
 static SDL_Window *window;
 static SDL_GLContext glContext;
+static SDL_AudioDeviceID audioDevice;
 static ImGuiIO *imguiIO;
 static GLuint displayTexture;
 static bool exited = false;
@@ -62,7 +63,8 @@ static bool stepBreakpoint = false;
 static bool enableBreakpoints = false;
 static std::set<uint32_t> breakpoints{};
 static char breakpointText[6]{};
-char uartText[255]{};
+static char uartText[255]{};
+static bool showFramerate = false;
 
 // Todo: Give colors better names
 static ImFont *font7Segment;
@@ -257,6 +259,7 @@ static void displayScreen() {
             if (displayScale < 1)
                 displayScale = 1;
         }
+        ImGui::Checkbox("Show Framerate", &showFramerate);
         ImGui::EndPopup();
     }
 
@@ -265,6 +268,9 @@ static void displayScreen() {
     // Options button
     if (ImGui::Button("Options"))
         ImGui::OpenPopup("context");
+
+    if (showFramerate)
+        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
     ImGui::End();
 }
@@ -501,21 +507,11 @@ static void displayProcessor() {
 
     ImGui::Separator();
 
-    for (int i = 0; i <= 11; i++) {
+    for (int i = 0; i <= 13; i++) {
         ImGui::TextColored(*registerColor, i >= 10 ? "    R%d:" : "    R%d: ", i);
         ImGui::SameLine();
         ImGui::Text("$%08X", emulator->getReg(i));
     }
-
-    // FP
-    ImGui::TextColored(*flagColor, "     X: ");
-    ImGui::SameLine();
-    ImGui::Text("$%08X", emulator->getX());
-
-    // FP
-    ImGui::TextColored(*flagColor, "     Y: ");
-    ImGui::SameLine();
-    ImGui::Text("$%08X", emulator->getY());
 
     // FP
     ImGui::TextColored(*flagColor, "    FP: ");
@@ -624,6 +620,11 @@ static void runEmulator() {
                     emulator->getGPIO(3) = ImGui::IsKeyDown(SDL_SCANCODE_D) or ImGui::IsKeyDown(SDL_SCANCODE_RIGHT);
             }
 
+            while (SDL_GetQueuedAudioSize(audioDevice) < AUDIO_BUFFER && !emulator->getAudioSamples().empty()) {
+                SDL_QueueAudio(audioDevice, &emulator->getAudioSamples().front(), 1);
+                emulator->getAudioSamples().pop();
+            }
+
             if (emulator->run()) {
                 halted = true;
                 break;
@@ -721,7 +722,7 @@ int main(int argc, char* argv[]) {
 #endif
 
     // Initialize SDL and OpenGL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER)) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER)) {
         std::cout << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
         return -1;
     }
@@ -771,6 +772,19 @@ int main(int argc, char* argv[]) {
     // Create display texture
     glGenTextures(1, &displayTexture);
 
+    // Initialize Audio
+    SDL_AudioSpec want, have;
+    want.freq = 44100;
+    want.format = AUDIO_U8;
+    want.channels = 1;
+    want.samples = AUDIO_BUFFER;
+    audioDevice = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
+    if (!audioDevice) {
+        std::cout << "Failed to initialize audio: " << SDL_GetError() << std::endl;
+        return -1;
+    }
+    SDL_PauseAudioDevice(audioDevice, 0);
+
     // Create ImGui windows
     ramEditor = new MemoryEditor();
     ramEditor->Open = false;
@@ -809,6 +823,7 @@ int main(int argc, char* argv[]) {
     ImGui::DestroyContext();
     SDL_GL_DeleteContext(glContext);
     SDL_DestroyWindow(window);
+    SDL_CloseAudioDevice(audioDevice);
     SDL_Quit();
 
     // Must be deleted after ImGui shutdown for INI saving

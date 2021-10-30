@@ -1,13 +1,13 @@
 ; Graphics Test
 
     jmp main
-    bra -6
+    bra -8
     jmp vblank
     jmp hblank
-    bra -6
-    bra -6
-    bra -6
-    bra -6
+    bra -8
+    bra -8
+    bra -8
+    bra -8
 
 
     include "libraries/Sonic.asm"

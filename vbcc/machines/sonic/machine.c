@@ -72,7 +72,7 @@ int regscratch[MAXR + 1];
 
 /* alignment of basic data-types, used to initialize align[] */
 static long malign[MAX_TYPE + 1] = {
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+        1, 1, 2, 4, 4, 4, 1, 1, 1, 1, 4, 1, 1, 1, 4, 1, 1, 1
 };
 
 /* sizes of basic data-types, used to initialize sizetab[] */
@@ -98,7 +98,7 @@ zmax msizetab[MAX_TYPE + 1] = {
 static struct Typ ityp = {INT};
 
 // Suffixes for load and store instructions by byte count
-static char memory_suffixes[5] = {'E', 'b', 'w', 'E', 'r'};
+static char memory_suffixes[5] = {'?', 'b', 'w', '?', 'r'};
 
 // IO port definitions
 #define PORT_COUNT 15
@@ -121,6 +121,9 @@ static int section;
 
 // The last variable head generated
 static struct Var *lastVarHeadVar;
+
+// Whether the last variable head has been created
+static int lastVarHeadCreated;
 
 // Whether the last compare insstruction was signed or not
 static int lastCompareSigned;
@@ -216,19 +219,16 @@ void header(FILE *f) {
     emit(f, "\tstb r1,y++\n");
     emit(f, "\tcmp r0,x\n");
     emit(f, "\tbne memcpy_loop_\n");
-    emit(f, "\tret\n");
-
-    ensure_section(f, 1);
-    emit(f, "\tvar[4] ; Pad by one word to prevent memory boundary issue\n");
+    emit(f, "\tret\n\n");
 
     headerGen = 1;
 }
 
 // Load address of object into register
-void load_address(FILE *f, int reg, obj o) {
+void load_address(FILE *f, int size, int reg, obj o) {
     if (o.v->storage_class == AUTO || o.v->storage_class == REGISTER) {
         emit(f, "\ttfr r%i,fp\n", reg);
-        emit(f, "\tadd r%i,%i\n", reg, o.v->offset - (o.v->offset < 0 ? 4 - 1 + 8 : 0) + o.val.vmax);
+        emit(f, "\tadd r%i,%i\n", reg, o.v->offset - (o.v->offset < 0 ? 8 - 2 * (4 - size) : 0) + o.val.vmax);
     } else {
         if (o.v->storage_class == STATIC)
             emit(f, "\tldr r%i,label%i\n", reg, o.v->offset);
@@ -249,21 +249,21 @@ int get_param_reg(FILE *f, int size, int tempReg, obj q) {
     if (q.flags & KONST)
         emit(f, "\tld%c r%i,$%x\n", memory_suffixes[size], tempReg, q.val.vuint);
     else if (q.flags & VARADR)
-        load_address(f, tempReg, q);
+        load_address(f, size, tempReg, q);
     else if (q.flags & DREFOBJ || q.val.vmax) {
         if (q.flags & REG) {
             emit(f, "\ttfr r%i,r%i\n", tempReg, q.reg - 1);
             if (q.val.vmax)
                 emit(f, "\tadd r%i,%i\n", tempReg, q.val.vint);
         } else
-            load_address(f, tempReg, q);
+            load_address(f, size, tempReg, q);
         if (q.flags & DREFOBJ && !(q.flags & REG))
             emit(f, "\tldr r%i,r%i,0\n", tempReg, tempReg);
         emit(f, "\tld%c r%i,r%i,0\n", memory_suffixes[size], tempReg, tempReg);
     } else {
         if (q.v->storage_class == AUTO || q.v->storage_class == REGISTER)
             emit(f, "\tld%c r%i,fp,%i\n", memory_suffixes[size], tempReg,
-                 q.v->offset - (q.v->offset < 0 ? size - 1 + 8 : 0) + q.val.vmax);
+                 q.v->offset - (q.v->offset < 0 ? 8 - 2 * (4 - size) : 0) + q.val.vmax);
         else if (q.v->storage_class == STATIC)
             emit(f, "\tld%c r%i,[label%i]\n", memory_suffixes[size], tempReg, q.v->offset);
         else {
@@ -292,7 +292,7 @@ void store_reg(FILE *f, int size, int reg, obj z) {
             if (z.val.vmax)
                 emit(f, "\tadd r0,%i\n", z.val.vint);
         } else
-            load_address(f, 0, z);
+            load_address(f, size, 0, z);
         if (z.flags & DREFOBJ && !(z.flags & REG))
             emit(f, "\tldr r0,r0,0\n");
         emit(f, "\tst%c r%i,r0,0\n", memory_suffixes[size], reg);
@@ -300,7 +300,7 @@ void store_reg(FILE *f, int size, int reg, obj z) {
     } else {
         if (z.v->storage_class == AUTO || z.v->storage_class == REGISTER)
             emit(f, "\tst%c r%i,fp,%i\n", memory_suffixes[size], reg,
-                 z.v->offset - (z.v->offset < 0 ? size - 1 + 8 : 0) + z.val.vmax);
+                 z.v->offset - (z.v->offset < 0 ? 8 - 2 * (4 - size) : 0) + z.val.vmax);
         else if (z.v->storage_class == STATIC)
             emit(f, "\tst%c r%i,[label%i]\n", memory_suffixes[size], reg, z.v->offset);
         else {
@@ -365,7 +365,7 @@ int is_last_push(struct IC *ic) {
 /*  Does necessary initializations for the code-generator. Gets called  */
 /*  once at the beginning and should return 0 in case of problems.      */
 int init_cg(void) {
-    maxalign = l2zm(1L);
+    maxalign = l2zm(4L);
     char_bit = l2zm(8L);
     stackalign = l2zm(4L);
 
@@ -496,21 +496,25 @@ void gen_ds(FILE *f, zmax size, struct Typ *t) {
 /*  aligned to multiples of <align> bytes.              */
 void gen_align(FILE *f, zmax align) {
     header(f);
+    if (align > 1)
+        emit(f, "\talign %i\n", zm2l(align));
 }
 
 /*  This function has to create the head of a variable  */
 /*  definition, i.e. the label and information for      */
 /*  linkage etc.                                        */
 void gen_var_head(FILE *f, struct Var *v) {
-    // Todo: Exclude list of built-in subroutines
     header(f);
 
     if (ISFUNC(v->vtyp->flags) || (v->storage_class == EXTERN && check_port(v->identifier) >= 0))
         return;
 
     lastVarHeadVar = v;
+    lastVarHeadCreated = 0;
 
     ensure_section(f, !(v->clist && is_const(v->vtyp)));
+
+    gen_align(f, falign(v->vtyp));
 
     if (v->storage_class == STATIC)
         emit(f, "label%d:", v->offset);
@@ -520,18 +524,26 @@ void gen_var_head(FILE *f, struct Var *v) {
     if (v->clist && is_const(v->vtyp))
         emit(f, "\n");
 
-    if (v->clist && !is_const(v->vtyp)) {
-        struct const_list *last = v->clist;
-        while (last->next)
-            last = last->next;
-        emit(f, "\tvar[%d]\n\n", last->idx + 1);
-    }
+    // if (v->clist && !is_const(v->vtyp)) {
+    //     struct const_list *last = v->clist;
+    //     while (last->next)
+    //         last = last->next;
+    //     emit(f, "\tvar[%d]\n\n", last->idx + 1);
+    // }
 }
 
 /*  This function has to create static storage          */
 /*  initialized with const-list p.                      */
 void gen_dc(FILE *f, int typf, struct const_list *p) {
     header(f);
+
+    if (!lastVarHeadCreated && !is_const(lastVarHeadVar->vtyp)) {
+        struct const_list *last = lastVarHeadVar->clist;
+        while (last->next)
+            last = last->next;
+        emit(f, "\tvar[%d]\n\n", (last->idx + 1) * sizetab[typf & NQ]);
+        lastVarHeadCreated = 1;
+    }
 
     struct VariableInit *init;
     if (section == 1) {
@@ -638,13 +650,27 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
     printiclist(stdout, firstIC);
     printf("\n");
 
-    emit(f, "\tpush fp\n");
+    emit(f, "; Save FP\n");
+    emit(f, "\tpush fp\n\n");
 
+    struct IC *ic = firstIC;
+
+    int interruptRegisters[16] = {1, 1};
     if (interrupt) {
-        emit(f, "\tpush r0\n");
-        emit(f, "\tpush r1\n");
-        emit(f, "\tpush x\n");
-        emit(f, "\tpush y\n");
+        emit(f, "; Save registers modified in this interrupt\n");
+        for (; ic; ic = ic->next) {
+            if (ic->code == ALLOCREG)
+                interruptRegisters[ic->q1.reg - 1] = 1;
+            else if (ic->code == ASSIGN 
+                && ((ic->typf & NQ) == STRUCT || (ic->typf & NQ) == VOID || (ic->typf & NQ) == ARRAY || ((ic->typf & NQ) == CHAR && ic->q2.val.vmax != 1))) {
+                interruptRegisters[12] = 1;
+                interruptRegisters[13] = 1;
+            }
+        }
+        for (int i = 0; i < 16; i++)
+            if (interruptRegisters[i])
+                emit(f, "\tpush r%i\n", i);
+        emit(f, "\n");
     }
 
     emit(f, "; Load Stack Frame\n");
@@ -653,8 +679,7 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
 
     int pushed = 0, hasPushed = 0;
 
-    struct IC *ic = firstIC;
-
+    ic = firstIC;
     for (; ic; ic = ic->next) {
         ensure_section(f, 0);
 
@@ -716,8 +741,8 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                     case VOID:
                     case ARRAY: {
                         assign_copy_array:
-                        load_address(f, 12, ic->q1);
-                        load_address(f, 13, ic->z);
+                        load_address(f, sizetab[q1typ(ic) & NQ], 12, ic->q1);
+                        load_address(f, sizetab[ztyp(ic) & NQ], 13, ic->z);
                         output_memcpy(f, 12, 13, ic->q2.val.vuint);
                         break;
                     }
@@ -733,7 +758,7 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
 
             case ADDRESS: /* Fetch the address of something, always AUTO or STATIC */
                 emit_ic_comment(f, ic);
-                load_address(f, 1, ic->q1);
+                load_address(f, sizetab[q1typ(ic) & NQ], 1, ic->q1);
                 store_reg(f, sizetab[ztyp(ic) & NQ], 1, ic->z);
                 emit(f, "\n");
                 break;
@@ -747,7 +772,7 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                     emit_ic_comment(f, ic);
 
                     if (!hasPushed)
-                        emit(f, "\tadd sp,%i\n", pushedargsize(get_next_call(ic)));
+                        emit(f, "\tadd sp,%i\n", pushedargsize(get_next_call(ic)) + 4 - stackframe % 4);
                     hasPushed = 1;
 
                     int offset;
@@ -844,7 +869,7 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                         emit(f, "\tlsl");
                         break;
                     case RSHIFT:
-                        emit(f, "\tlsr");
+                        emit(f, q1typ(ic) & UNSIGNED ? "\tlsr" : "\tasr");
                         break;
                 }
 
@@ -869,7 +894,7 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
             case CONVERT: /* Convert between types */
                 emit_ic_comment(f, ic);
 
-                // Todo: Treat long the same as int using ISLONG()
+                // Todo: Treat long the same as int using ISLshortONG()
 
                 if ((q1typ(ic) & UNSIGNED && (q1typ(ic) & NQ) < INT &&
                      ((ztyp(ic) & NU) == (UNSIGNED | INT) ||
@@ -895,7 +920,7 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                     int reg = get_param_reg(f, sizetab[q1typ(ic) & NQ], 1, ic->q1);
                     emit(f, "\tand r%i,$000000FF\n", reg);
                     store_reg(f, sizetab[ztyp(ic) & NQ], reg, ic->z);
-                } else if ((ztyp(ic) & NQ) == INT && (ztyp(ic) & NQ) == SHORT) { // (any sign) int -> (any sign) short
+                } else if ((q1typ(ic) & NQ) == INT && (ztyp(ic) & NQ) == SHORT) { // (any sign) int -> (any sign) short
                     int reg = get_param_reg(f, sizetab[q1typ(ic) & NQ], 1, ic->q1);
                     emit(f, "\tand r%i,$0000FFFF\n", reg);
                     store_reg(f, sizetab[ztyp(ic) & NQ], reg, ic->z);
@@ -985,10 +1010,12 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                     emit(f, "\n");
                 } else {
                     emit(f, "; Call Function \"%s\"\n", ic->q1.v->identifier);
+                    if (!hasPushed)
+                        emit(f, "\tadd sp,%i\n", 4 - stackframe % 4);
                     pushed = 0;
                     hasPushed = 0;
                     emit(f, "\tjsr _%s\n", ic->q1.v->identifier);
-                    emit(f, "\tsub sp,%i\n", pushedargsize(ic));
+                    emit(f, "\tsub sp,%i\n", pushedargsize(ic) + 4 - stackframe % 4);
                 }
                 break;
 
@@ -1005,12 +1032,14 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
     emit(f, "\tsub sp,%i\n", zm2l(stackframe));
 
     if (interrupt) {
-        emit(f, "\tpop y\n");
-        emit(f, "\tpop x\n");
-        emit(f, "\tpop r1\n");
-        emit(f, "\tpop r0\n");
+        emit(f, "; Restore registers modified in this interrupt\n");
+        for (int i = 15; i >= 0; i--)
+            if (interruptRegisters[i])
+                emit(f, "\tpop r%i\n", i);
+        emit(f, "\n");
     }
 
+    emit(f, "; Restore FP\n");
     emit(f, "\tpop fp\n");
 
     if (!strcmp(func->identifier, "main"))
@@ -1056,9 +1085,14 @@ void cleanup_cg(FILE *f) {
                     break;
                 size++;
             }
-            emit(f, "\tldr x,%s__init\n", init->variable);
-            emit(f, "\tldr y,%s\n", init->variable);
-            output_memcpy(f, 12, 13, size);
+            if (size == 1) {
+                emit(f, "\tld%c r0,%s__init\n", memory_suffixes[init->size], init->variable);
+                emit(f, "\tst%c r0,%s\n", memory_suffixes[init->size], init->variable);
+            } else {
+                emit(f, "\tldr x,%s__init\n", init->variable);
+                emit(f, "\tldr y,%s\n", init->variable);
+                output_memcpy(f, 12, 13, size);
+            }
         }
         previousVariable = init->variable;
         init = init->next;
@@ -1075,6 +1109,7 @@ void cleanup_cg(FILE *f) {
         if (!previousVariable || strcmp(previousVariable, init->variable)) {
             if (previousVariable)
                 emit(f, "\n");
+            gen_align(f, init->size);
             emit(f, "%s__init:\n", init->variable);
         }
         emit(f, "\td%c $%x\n", init->size == 1 ? 'b' : (init->size == 2 ? 'w' : 'd'), init->value);
@@ -1087,7 +1122,7 @@ void cleanup_cg(FILE *f) {
     for (int i = 1; i < INTERRUPT_COUNT; i++)
         if (!interrupts[i])
             emit(f, "_%s:\n", interrupt_names[i]);
-    emit(f, "\tbra -6\n\n");
+    emit(f, "\tbra -8\n\n");
 
     ensure_section(f, 1);
     emit(f, "__stack:\n");

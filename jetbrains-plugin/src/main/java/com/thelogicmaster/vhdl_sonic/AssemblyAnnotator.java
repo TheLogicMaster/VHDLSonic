@@ -109,7 +109,7 @@ public class AssemblyAnnotator implements Annotator {
 			ensureOperandsOrder(instruction, holder, operands, evaluated, ADDRESS_OPERANDS);
 		} else if (Pattern.matches("^(tfr)$", mnemonic)) {
 			ensureOperandsOrder(instruction, holder, operands, evaluated, REGISTER_REGISTER_OPERANDS);
-		} else if (Pattern.matches("^(int)$", mnemonic)) {
+		} else if (Pattern.matches("^(int|align)$", mnemonic)) {
 			ensureOperandsOrder(instruction, holder, operands, evaluated, CONSTANT_OPERANDS);
 		} else if (Pattern.matches("^(jmp)$", mnemonic)) {
 			ensureOperandsOrder(instruction, holder, operands, evaluated, REGISTER_OR_ADDRESS_OPERANDS);

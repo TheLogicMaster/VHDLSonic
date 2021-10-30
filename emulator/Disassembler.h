@@ -12,15 +12,13 @@ enum AddressingMode {
     Register,
     RelativeJump,
     RegisterImmediate,
-    RegisterImmediateHalfWord,
-    RegisterImmediateByte,
     RegisterAddress,
     RegisterRegister,
     Relative,
     Indexed
 };
 
-const uint8_t ADDRESSING_MODE_SIZES[11]{2, 6, 2, 6, 6, 4, 3, 6, 2, 6, 2};
+const uint8_t ADDRESSING_MODE_SIZES[9]{4, 8, 4, 8, 8, 8, 4, 8, 4};
 
 struct InstructionType {
     const char *text;
@@ -52,8 +50,8 @@ const InstructionType INSTRUCTIONS[128]{
         {"BGT", RelativeJump},
         {"BLE", RelativeJump},
         {"BRA", RelativeJump},
-        {"LDB", RegisterImmediateByte},
-        {"LDW", RegisterImmediateHalfWord},
+        {},
+        {},
         {"LDR", RegisterImmediate},
         {"LDB", RegisterAddress},
         {"LDW", RegisterAddress},

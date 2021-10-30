@@ -4,7 +4,7 @@
 
 Disassembler::Disassembler(uint8_t *memory) : memory(memory) {
     for (int i = 0; i < 8; i++)
-        disassemble(i * 6, 0, true);
+        disassemble(i * 8, 0, true);
 }
 
 const std::list<Instruction> &Disassembler::getDisassembled() const {
@@ -15,7 +15,7 @@ void Disassembler::disassemble(uint32_t address, int depth, bool jumpTable) {
     if (depth > 100)
         return;
 
-    while (address <= 0xFFFF) {
+    while (address <= 0xFFFF and address % 4 == 0) {
         auto instruction = disassembleInstruction(address);
         uint32_t end = address + instruction.size - 1;
         if (instruction.size == 0 or address + instruction.size - 1 > 0xFFFF)
@@ -63,10 +63,11 @@ Instruction Disassembler::disassembleInstruction(uint32_t address) const {
     uint8_t opcode = memory[address];
     uint8_t reg1 = memory[address + 1] >> 4;
     uint8_t reg2 = memory[address + 1] & 0xF;
-    uint32_t immediate = reverseWordBytes(*(uint32_t*)&(memory + 2)[address]);
+    bool indexPost = memory[address + 2] & 0x80;
+    bool indexInc = memory[address + 2] & 0x40;
+    bool indexDec = memory[address + 2] & 0x20;
+    uint32_t immediate = reverseWordBytes(*(uint32_t*)&(memory + 4)[address]);
     int32_t immediateRelative = *(int32_t*)&immediate;
-    uint16_t immediateHalfWord = immediate >> 16;
-    uint8_t immediateByte = immediateHalfWord >> 8;
     auto type = INSTRUCTIONS[opcode];
 
     if (type.text == nullptr)
@@ -83,10 +84,6 @@ Instruction Disassembler::disassembleInstruction(uint32_t address) const {
     instruction.assembly += stringFormat("$%02x ", memory[address + 1]);
     if (instruction.size == 2)
         instruction.assembly += "           ";
-    else if (instruction.size == 3)
-        instruction.assembly += stringFormat("$%02x        ", immediateByte);
-    else if (instruction.size == 4)
-        instruction.assembly += stringFormat("$%04x      ", immediateHalfWord);
     else if (instruction.size == 6)
         instruction.assembly += stringFormat("$%08x  ", immediate);
 
@@ -107,12 +104,6 @@ Instruction Disassembler::disassembleInstruction(uint32_t address) const {
         case RegisterImmediate:
             instruction.assembly += stringFormat(" R%d,$%08x", reg1, immediate);
             break;
-        case RegisterImmediateHalfWord:
-            instruction.assembly += stringFormat(" $%04x", immediateHalfWord);
-            break;
-        case RegisterImmediateByte:
-            instruction.assembly += stringFormat(" $%02x", immediateByte);
-            break;
         case RegisterAddress:
             instruction.assembly += stringFormat(" R%d,[$%08x]", reg1, immediate);
             break;
@@ -124,17 +115,17 @@ Instruction Disassembler::disassembleInstruction(uint32_t address) const {
             break;
         case Indexed:
             instruction.assembly += stringFormat(" R%d,", reg1);
-            if (!(reg2 & 0x8)) {
-                if (reg2 & 0x4)
+            if (!indexPost) {
+                if (indexInc)
                     instruction.assembly += "++";
-                else if (reg2 & 0x2)
+                else if (indexDec)
                     instruction.assembly += "--";
             }
-            instruction.assembly += (reg2 & 1 ? "Y" : "X");
-            if (reg2 & 0x8) {
-                if (reg2 & 0x4)
+            instruction.assembly += stringFormat("R%d", reg2);
+            if (indexPost) {
+                if (indexInc)
                     instruction.assembly += "++";
-                else if (reg2 & 0x2)
+                else if (indexDec)
                     instruction.assembly += "--";
             }
             break;
