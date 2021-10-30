@@ -1,0 +1,10 @@
+/*/build
+.idea/
+.gradle/
+emulator/cmake/
+emulator/cmake-build-debug/
+/vbcc/bin
+/vbcc/machines/*/*.o
+/fpga/simulation/
+!/fpga/simulation/cpu.do
+!/fpga/simulation/vhdlsonic.mpf
