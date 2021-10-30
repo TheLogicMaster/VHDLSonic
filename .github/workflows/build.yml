@@ -29,6 +29,11 @@ jobs:
           cmake ..
           make
 
+      - name: Linux VBCC Build
+        run: |
+          cd ./vbcc
+          echo n | make TARGET=sonic bin/vbccsonic
+
       #- name: Install Emscripten Dependencies
         #run: |
           #wget -q https://github.com/emscripten-core/emsdk/archive/master.tar.gz
@@ -54,6 +59,7 @@ jobs:
           rm -rf ./Emulator
           mkdir ./Emulator
           cp ./emulator/build/Emulator ./Emulator/Emulator.run
+          cp ./vbcc/bin/vbccsonic ./Emulator
           #cp ./programs/build/*.bin ./Emulator
           #cp ./assembler.py ./Emulator
           #cp ./image_convert.py ./Emulator
@@ -146,6 +152,12 @@ jobs:
           useVcpkgToolchainFile: false
           buildWithCMake: true
 
+      - name: Windows VBCC Build
+        shell: bash
+        run: |
+          cd vbcc
+          echo n | make TARGET=sonic bin/vbccsonic
+
       - name: Install Python 3.9
         uses: actions/setup-python@v2
         with:
@@ -163,6 +175,7 @@ jobs:
           mkdir ./build
           cp emulator/build/*.exe ./build
           cp emulator/build/*.dll ./build
+          cp vbcc/bin/vbccsonic ./build
           #cp programs/build/*.bin ./build
           #cp assembler.py ./build
           #cp image_convert.py ./build

@@ -733,8 +733,7 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                     case SHORT:
                     case INT:
                     case POINTER:
-                        int reg = get_param_reg(f, sizetab[q1typ(ic) & NQ], 1, ic->q1);
-                        store_reg(f, sizetab[ztyp(ic) & NQ], reg, ic->z);
+                        store_reg(f, sizetab[ztyp(ic) & NQ], get_param_reg(f, sizetab[q1typ(ic) & NQ], 1, ic->q1), ic->z);
                         break;
 
                     case STRUCT:
