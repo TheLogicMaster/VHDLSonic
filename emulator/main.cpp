@@ -778,6 +778,7 @@ int main(int argc, char* argv[]) {
     want.format = AUDIO_U8;
     want.channels = 1;
     want.samples = AUDIO_BUFFER;
+    want.callback = nullptr;
     audioDevice = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
     if (!audioDevice) {
         std::cout << "Failed to initialize audio: " << SDL_GetError() << std::endl;

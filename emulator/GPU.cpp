@@ -1,5 +1,4 @@
 #include <cstring>
-#include <cstdio>
 #include "GPU.h"
 
 GPU::GPU() {

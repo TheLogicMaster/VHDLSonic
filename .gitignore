@@ -4,6 +4,7 @@
 emulator/cmake/
 emulator/cmake-build-debug/
 /vbcc/bin
+/vbcc/machines/*/dt.*
 /vbcc/machines/*/*.o
 /fpga/simulation/
 !/fpga/simulation/cpu.do
