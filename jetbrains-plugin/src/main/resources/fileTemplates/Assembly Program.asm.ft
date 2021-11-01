@@ -1,1 +1,18 @@
 ; ${NAME}
+
+    jmp main
+    bra -8
+    bra -8
+    bra -8
+    bra -8
+    bra -8
+    bra -8
+    bra -8
+
+    include "libraries/Sonic.asm"
+
+main:
+
+loop:
+
+    bra loop

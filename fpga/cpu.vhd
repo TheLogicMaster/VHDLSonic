@@ -136,8 +136,8 @@ begin
 
 	alu_op_1 <= std_logic_vector(reg_file(to_integer(source_reg)));
 	alu_op_2 <= 
-		data_in when state = s_alu_imm_2
-		else std_logic_vector(to_unsigned(1, 32)) when opcode >= 16#3E# and opcode <= 16#3F#
+		std_logic_vector(to_unsigned(1, 32)) when opcode >= 16#3E# and opcode <= 16#3F#
+		else data_in when state = s_alu_imm_2
 		else std_logic_vector(reg_file(to_integer(operand_reg)));
 	alu_mode <=
 		std_logic_vector(to_unsigned((to_integer(opcode) - 16#26#) / 2, 4)) when opcode >= 16#26# and opcode <= 16#3B#
@@ -274,10 +274,10 @@ begin
 							when 16#1F# to 16#21# => state <= s_store_ind_1; -- Indexed store instructions
 							when 16#22# to 16#24# => state <= s_store_rel_1; -- Relative store instructions
 							when 16#25# => -- TFR
-								reg_file(to_integer(source_reg)) <= reg_file(to_integer(operand_reg));
+								reg_file(to_integer(unsigned(data_in(23 downto 20)))) <= reg_file(to_integer(unsigned(data_in(19 downto 16))));
 								state <= s_decode_1;
-							when 16#26# to 16#3D# => -- ALU instructions
-								if data_in(24) = '1' then
+							when 16#26# to 16#3F# => -- ALU instructions
+								if data_in(24) = '1' or data_in(31 downto 24) = x"3E" or data_in(31 downto 24) = x"3F" then
 									state <= s_alu_reg;
 								else
 									state <= s_alu_imm_1;
@@ -300,7 +300,7 @@ begin
 								state <= s_pop_1; -- POP
 							when 16#46# => state <= s_jmp_imm_1; -- JMP imm
 							when 16#47# => -- JMP reg
-								pc <= reg_file(to_integer(source_reg));
+								pc <= reg_file(to_integer(unsigned(data_in(23 downto 20))));
 								state <= s_decode_1;
 							when 16#48# => state <= s_jsr_1; -- JSR
 							when 16#49# => state <= s_ret_1; -- RET
@@ -526,8 +526,10 @@ begin
 					when s_store_rel_4 => state <= s_decode_1;
 					
 					-- ALU register
-					when s_alu_reg => 
-						reg_file(to_integer(source_reg)) <= unsigned(alu_result);
+					when s_alu_reg =>
+						if opcode /= x"3D" then
+							reg_file(to_integer(source_reg)) <= unsigned(alu_result);
+						end if;
 						arithmetic_flags <= alu_flags;
 						state <= s_decode_1;
 					
@@ -536,7 +538,9 @@ begin
 					
 					-- ALU immediate 2
 					when s_alu_imm_2 =>
-						reg_file(to_integer(source_reg)) <= unsigned(alu_result);
+						if opcode /= x"3C" then
+							reg_file(to_integer(source_reg)) <= unsigned(alu_result);
+						end if;
 						arithmetic_flags <= alu_flags;
 						pc <= pc + 4;
 						state <= s_decode_1;

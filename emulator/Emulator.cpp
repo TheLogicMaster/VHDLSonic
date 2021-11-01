@@ -440,6 +440,40 @@ uint8_t Emulator::getStatus() const {
     return status;
 }
 
+uint32_t Emulator::readMicrocontroller(uint32_t address) {
+    switch (address) {
+        case 10 ... 15: // Seven segment displays
+            return sevenSegmentDisplays[address - 10];
+        case 120 ... 129: // Switches
+            return switches[address - 120];
+        case 130 ... 131: // Buttons
+            return buttons[address - 130];
+        default:
+            return 0;
+    }
+}
+
+void Emulator::writeMicrocontroller(uint32_t address, uint32_t value) {
+    switch (address) {
+        case 0 ... 9: // LEDs
+            lights[address] = value;
+            break;
+        case 10 ... 15: // Seven segment displays
+            sevenSegmentDisplays[address - 10] = value;
+            break;
+        case 132: // Serial
+            if (value == 0)
+                break;
+            std::cout << (char)value << std::flush;
+            printBuffer.push_back(*(char*)&value);
+            if (printBuffer.length() > PRINT_BUFFER)
+                printBuffer.erase(0, 1);
+            break;
+        default:
+            break;
+    }
+}
+
 uint32_t Emulator::readUint32(uint32_t address) {
     switch (address) {
         case 0x00000 ... 0x0FFFF - 3:
@@ -454,8 +488,8 @@ uint32_t Emulator::readUint32(uint32_t address) {
             return rand();
         case 0x30000 ... 0x3FFFF:
             return gpu.read((address - 0x30000) / 4);
-        case 0x40004 ... 0x40004 + 36 * 4 - 1:
-            return gpio[(address - 0x40004) / 4];
+        case 0x40000 ... 0x4FFFF:
+            return readMicrocontroller((address - 0x40000) / 4);
         default:
             return 0;
     }
@@ -475,13 +509,10 @@ void Emulator::writeUint32(uint32_t address, uint32_t value) {
         case 0x30000 ... 0x3FFFF:
             gpu.write((address - 0x30000) / 4, value);
             break;
-        case 0x40000: // Serial
-            if (value == 0)
-                break;
-            std::cout << (char)value << std::flush;
-            printBuffer.push_back(*(char*)&value);
-            if (printBuffer.length() > PRINT_BUFFER)
-                printBuffer.erase(0, 1);
+        case 0x40000 ... 0x4FFFF:
+            writeMicrocontroller((address - 0x40000) / 4, value);
+            break;
+        default:
             break;
     }
 }
@@ -586,4 +617,3 @@ uint32_t Emulator::performASR(uint32_t reg, uint32_t value) {
     setFlag(FLAG_Z, !result);
     return result;
 }
-

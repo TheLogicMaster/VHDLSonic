@@ -19,5 +19,12 @@
     def sprites=$3D314
 
 ; Microcontroller ports
-    def serial=$40000
-    def gpio=$40004
+    def leds=$40000
+    def seven_segment=$40028
+    def gpio=$40040
+    def gpio_modes=$400D0
+    def arduino=$40160
+    def arduino_modes=$40416
+    def switches=$401E0
+    def buttons=$40208
+    def serial=$40210

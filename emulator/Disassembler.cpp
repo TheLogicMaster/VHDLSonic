@@ -37,6 +37,9 @@ void Disassembler::disassemble(uint32_t address, int depth, bool jumpTable) {
         if (instruction.opcode == 0x46) { // JMP addr
             disassemble(instruction.immediate, depth + 1);
             return;
+        } else if (instruction.opcode == 0x0f) { // BRA
+            disassemble(end + 1 + *(int32_t*)&instruction.immediate, depth + 1);
+            return;
         }
 
         if (jumpTable)
@@ -45,9 +48,6 @@ void Disassembler::disassemble(uint32_t address, int depth, bool jumpTable) {
         if (instruction.opcode == 0x47) { // JMP r
             // Todo: Support disassembling after variable jumps
             //variableJumps.emplace_back(address);
-            return;
-        } else if (instruction.opcode == 0x0f) { // BRA
-            disassemble(end + 1 + *(int32_t*)&instruction.immediate, depth + 1);
             return;
         } else if (instruction.opcode >= 0x01 && instruction.opcode <= 0x0E) // Conditional branching
             disassemble(end + 1 + *(int32_t*)&instruction.immediate, depth + 1);

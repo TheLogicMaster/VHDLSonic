@@ -24,7 +24,7 @@ def main():
         "BEGIN\n"
     ])
     for i in range(int(len(binary) / 4)):
-        f.write(f'{i} : {format(binary[i], "02x")}{format(binary[i + 1], "02x")}{format(binary[i + 2], "02x")}{format(binary[i + 3], "02x")};\n')
+        f.write(f'{i} : {format(binary[i * 4], "02x")}{format(binary[i * 4 + 1], "02x")}{format(binary[i * 4 + 2], "02x")}{format(binary[i * 4 + 3], "02x")};\n')
     f.write("END\n")
     f.close()
 

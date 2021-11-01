@@ -5,6 +5,7 @@
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import shlex
 
@@ -634,14 +635,30 @@ def main():
 
     parser = argparse.ArgumentParser(description='Assemble a program. Assumed to be in the <project>/programs directory by default')
     parser.add_argument('program', help='The program file to assemble')
+    parser.add_argument('-t', '--type', default='assembly', choices=['assembly', 'c'])
     parser.add_argument('-r', '--run', action='store_true', help="Whether to run the emulator after assembly")
     parser.add_argument('-f', '--fpga', default='none', choices=['none', 'patch', 'flash'], type=str.lower, help="Whether to patch or run for FPGA (Linux only)")
     parser.add_argument('-e', '--emulator', help='The path to the emulator if not "../emulator/build/Emulator"')
+    parser.add_argument('-c', '--compiler', help='The path to the compiler if not "../vbcc/bin/vbccsonic"')
     parser.add_argument('-m', '--memory', action='store_true', help='Assemble for being run by bootloader')
     args = parser.parse_args()
 
     memory = args.memory
     file = args.program
+
+    os.makedirs("./build", exist_ok=True)
+
+    # Compile C program if needed
+    if args.type == 'c':
+        copied = os.path.join("./build", os.path.basename(file))
+        shutil.copyfile(file, copied)
+        shutil.rmtree('./build/libraries', True)
+        shutil.copytree('./libraries', './build/libraries')
+        shutil.rmtree('./build/data', True)
+        shutil.copytree('./data', './build/data')
+        file = f'{copied[:-2]}.asm'
+        cmd = f"\"{args.compiler if args.compiler else os.path.join(os.pardir, 'vbcc/bin/vbccsonic')}\" \"{copied}\""
+        subprocess.run(shlex.split(cmd), check=True)
 
     parse_file()
 
@@ -655,7 +672,7 @@ def main():
             if labels[label] < 0x10000:
                 offset = 0x10000
             else:
-                offset = 0x8000
+                offset = 0x18000
         write_word_in_output(addr, labels[label] + offset)
 
     # Substitute labels for relative jumps
@@ -678,11 +695,18 @@ def main():
     # Save machine code results
     rom_name = os.path.splitext(os.path.basename(args.program))[0] + (".img" if memory else ".bin")
     rom_path = os.path.join("./build", rom_name)
-    os.makedirs("./build", exist_ok=True)
     f = open(rom_path, "wb")
     f.write(output)
     f.close()
 
+    # Patch rom and flash dev board if needed
+    fpga_dir = os.path.join(os.pardir, 'fpga')
+    if args.fpga == "patch":
+        os.system(f'/bin/bash "{os.path.join(fpga_dir, "patch_rom.sh")}" "{os.path.abspath(rom_path)}"')
+    elif args.fpga == "flash":
+        os.system(f'/bin/bash "{os.path.join(fpga_dir, "incremental_flash.sh")}" "{os.path.abspath(rom_path)}"')
+
+    # Run emulator if needed
     if args.run:
         os.chdir('./build')
         cmd = f"\"{args.emulator if args.emulator else os.path.join(os.pardir, os.pardir, 'emulator/build/Emulator')}\" \"{rom_name}\""

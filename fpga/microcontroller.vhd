@@ -56,6 +56,7 @@ begin
 		index := (to_integer(unsigned(address)) - 16#40000#) / 4;
 		
 		case index is
+         when 10 to 15 => data_out <= x"0000000" & seg7_states(index - 10);
 			when 120 to 129 => data_out <= x"0000000" & "000" & switches(index - 120);
 			when 130 to 131 => data_out <= x"0000000" & "000" & buttons(index - 130);
 			when others => data_out <= x"00000000";
@@ -76,7 +77,7 @@ begin
 			gpio_states <= x"000000000";
 			gpio_modes <= x"000000000";
 			leds <= "0000000000";
-		elsif rising_edge(clock) then
+		elsif rising_edge(clock) and write_en = '1' then
 			if data_in = x"00000000" then
 				bool := '0';
 			else

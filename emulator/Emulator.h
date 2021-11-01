@@ -73,6 +73,9 @@ private:
     uint8_t interruptEnable = 0;
     uint8_t interruptFlags = 0;
 
+    uint32_t readMicrocontroller(uint32_t address);
+    void writeMicrocontroller(uint32_t address, uint32_t value);
+
     uint8_t readUint8(uint32_t address);
     void writeUint8(uint32_t address, uint8_t value);
     uint16_t readUint16(uint32_t address);

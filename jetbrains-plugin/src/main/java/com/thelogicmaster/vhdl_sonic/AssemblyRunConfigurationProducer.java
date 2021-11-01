@@ -33,9 +33,14 @@ public class AssemblyRunConfigurationProducer extends LazyRunConfigurationProduc
 
 		configuration.setWorkingDirectory(sourceElement.get().getContainingFile().getVirtualFile().getParent().getPath());
 
-		String params = "-r \"" + sourceElement.get().getContainingFile().getVirtualFile().getPath() + "\"";
+		String params = "";
+
 		if (!settings.emulatorPath.isEmpty())
 			params = params + " -e \"" + settings.emulatorPath + "\"";
+		if (!settings.compilerPath.isEmpty())
+			params = params + " -c \"" + settings.compilerPath + "\"";
+
+		params += " -r \"" + sourceElement.get().getContainingFile().getVirtualFile().getPath() + "\"";
 
 		configuration.setScriptParameters(params);
 		configuration.setName("Run " + sourceElement.get().getContainingFile().getName().split("\\.")[0]);

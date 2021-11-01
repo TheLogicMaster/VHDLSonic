@@ -29,7 +29,9 @@ public class AssemblySettingsConfigurable implements Configurable {
 	@Override
 	public boolean isModified() {
 		AssemblySettingsState settings = AssemblySettingsState.getInstance();
-		return !settingsComponent.getAssemblerPath().equals(settings.assemblerPath) || !settingsComponent.getEmulatorPath().equals(settings.emulatorPath);
+		return !settingsComponent.getAssemblerPath().equals(settings.assemblerPath)
+			|| !settingsComponent.getEmulatorPath().equals(settings.emulatorPath)
+			|| !settingsComponent.getCompilerPath().equals(settings.compilerPath);
 	}
 
 	@Override
@@ -37,6 +39,7 @@ public class AssemblySettingsConfigurable implements Configurable {
 		AssemblySettingsState settings = AssemblySettingsState.getInstance();
 		settings.assemblerPath = settingsComponent.getAssemblerPath();
 		settings.emulatorPath = settingsComponent.getEmulatorPath();
+		settings.compilerPath = settingsComponent.getCompilerPath();
 		EditorNotifications.updateAll();
 	}
 
@@ -45,6 +48,7 @@ public class AssemblySettingsConfigurable implements Configurable {
 		AssemblySettingsState settings = AssemblySettingsState.getInstance();
 		settingsComponent.setAssemblerPath(settings.assemblerPath);
 		settingsComponent.setEmulatorPath(settings.emulatorPath);
+		settingsComponent.setCompilerPath(settings.compilerPath);
 	}
 
 	@Override

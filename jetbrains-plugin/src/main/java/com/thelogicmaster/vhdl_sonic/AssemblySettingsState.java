@@ -23,6 +23,7 @@ public class AssemblySettingsState implements PersistentStateComponent<AssemblyS
 
 	public String assemblerPath = "";
 	public String emulatorPath = "";
+	public String compilerPath = "";
 
 	public static AssemblySettingsState getInstance() {
 		return ApplicationManager.getApplication().getService(AssemblySettingsState.class);
@@ -39,6 +40,15 @@ public class AssemblySettingsState implements PersistentStateComponent<AssemblyS
 				return false;
 		} else if (rootPath != null) {
 			if (!Files.exists(rootPath.resolve("assembler.py").toAbsolutePath()))
+				return false;
+		} else
+			return false;
+
+		if (!compilerPath.isEmpty()) {
+			if (!Files.exists(Paths.get(compilerPath)))
+				return false;
+		} else if (rootPath != null) {
+			if (!Files.exists(rootPath.resolve("vbcc/bin/vbccsonic").toAbsolutePath()))
 				return false;
 		} else
 			return false;

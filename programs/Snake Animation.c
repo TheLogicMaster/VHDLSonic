@@ -47,7 +47,6 @@ int main() {
         BG_Data[snake_title[i] + 10 + 64 * (snake_title[i + 1] + 17)] = 5;
     BG_Data[13 + 64 * 19] = 9;
 
-
     Render = 1;
 
     unsigned char time = 0;
