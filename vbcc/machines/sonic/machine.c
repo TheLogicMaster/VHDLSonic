@@ -10,7 +10,7 @@ static char FILE_[] = __FILE__;
 /*  Public data that MUST be there.                             */
 
 /* Name and copyright. */
-char cg_copyright[] = "vbcc LM-8 code-generator V0.1 (c) in 2021 by Justin Marentette";
+char cg_copyright[] = "vbcc VHDLSonic code-generator V0.1 (c) in 2021 by Justin Marentette";
 
 /*  Commandline-flags the code-generator accepts:
     0: just a flag
@@ -647,9 +647,9 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
         emit(f, "__int%i:\n", interrupt);
     emit(f, "_%s:\n", func->identifier);
 
-    printf("%s\n", func->identifier);
-    printiclist(stdout, firstIC);
-    printf("\n");
+    // printf("%s\n", func->identifier);
+    // printiclist(stdout, firstIC);
+    // printf("\n");
 
     emit(f, "; Save FP\n");
     emit(f, "\tpush fp\n\n");

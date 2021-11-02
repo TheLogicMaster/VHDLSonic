@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import shlex
+import platform
 
 constants = {}
 line_number = 0
@@ -700,11 +701,11 @@ def main():
     f.close()
 
     # Patch rom and flash dev board if needed
-    fpga_dir = os.path.join(os.pardir, 'fpga')
+    bash = 'wsl /bin/bash' if 'Windows' in platform.system() else '/bin/bash'
     if args.fpga == "patch":
-        os.system(f'/bin/bash "{os.path.join(fpga_dir, "patch_rom.sh")}" "{os.path.abspath(rom_path)}"')
+        os.system(f'{bash} ../fpga/patch_rom.sh ./build/"{rom_name}"')
     elif args.fpga == "flash":
-        os.system(f'/bin/bash "{os.path.join(fpga_dir, "incremental_flash.sh")}" "{os.path.abspath(rom_path)}"')
+        os.system(f'{bash} ../fpga/incremental_flash.sh ./build/"{rom_name}"')
 
     # Run emulator if needed
     if args.run:
