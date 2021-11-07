@@ -47,12 +47,18 @@ def ensure_output_size(size):
 
 # Ensures the current address is aligned correctly
 def ensure_alignment(align):
-    global address
-    label = last_data_label if data_section else last_label
-    while address % align:
-        if label is not None and labels[label] == address:
-            labels[label] = address + 1
-        address = address + 1
+    global address, data_address
+
+    if data_section:
+        while data_address % align:
+            if last_data_label is not None and labels[last_data_label] == data_address:
+                labels[last_data_label] = data_address + 1
+            data_address = data_address + 1
+    else:
+        while address % align:
+            if last_label is not None and labels[last_label] == address:
+                labels[last_label] = address + 1
+            address = address + 1
 
 
 # Writes a word into the output at the specified location
@@ -197,6 +203,8 @@ def output_load_store_instr(params, size, store=False):
     if len(params) == 2:
         const = parse_constant(params[1])
         if const is not None and not store:
+            if size != 2:
+                error("Must use LDR for immediate values")
             output_byte(0x10 + size)
             output_registers(reg)
             output_word(const)

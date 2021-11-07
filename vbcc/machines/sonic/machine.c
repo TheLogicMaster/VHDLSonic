@@ -248,7 +248,7 @@ int get_param_reg(FILE *f, int size, int tempReg, obj q) {
     if (q.flags & REG && !(q.flags & DREFOBJ))
         return q.reg - 1;
     if (q.flags & KONST)
-        emit(f, "\tld%c r%i,$%x\n", memory_suffixes[size], tempReg, q.val.vuint);
+        emit(f, "\tldr r%i,$%x\n", tempReg, q.val.vuint);
     else if (q.flags & VARADR)
         load_address(f, size, tempReg, q);
     else if (q.flags & DREFOBJ || q.val.vmax) {
@@ -257,7 +257,7 @@ int get_param_reg(FILE *f, int size, int tempReg, obj q) {
             if (q.val.vmax)
                 emit(f, "\tadd r%i,%i\n", tempReg, q.val.vint);
         } else
-            load_address(f, size, tempReg, q);
+            load_address(f, 4, tempReg, q);
         if (q.flags & DREFOBJ && !(q.flags & REG))
             emit(f, "\tldr r%i,r%i,0\n", tempReg, tempReg);
         emit(f, "\tld%c r%i,r%i,0\n", memory_suffixes[size], tempReg, tempReg);
@@ -293,7 +293,7 @@ void store_reg(FILE *f, int size, int reg, obj z) {
             if (z.val.vmax)
                 emit(f, "\tadd r0,%i\n", z.val.vint);
         } else
-            load_address(f, size, 0, z);
+            load_address(f, 4, 0, z);
         if (z.flags & DREFOBJ && !(z.flags & REG))
             emit(f, "\tldr r0,r0,0\n");
         emit(f, "\tst%c r%i,r0,0\n", memory_suffixes[size], reg);
@@ -963,7 +963,6 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
             case TEST: /* Compare against zero */
                 emit_ic_comment(f, ic);
                 lastCompareSigned = 0;
-                int t = q1typ(ic);
                 emit(f, "\tcmp r%i,0\n\n", get_param_reg(f, sizetab[q1typ(ic) & NQ], 0, ic->q1));
                 break;
 
@@ -1125,6 +1124,7 @@ void cleanup_cg(FILE *f) {
     emit(f, "\tbra -8\n\n");
 
     ensure_section(f, 1);
+    emit(f, "\talign 4\n");
     emit(f, "__stack:\n");
 }
 

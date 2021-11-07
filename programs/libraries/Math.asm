@@ -58,7 +58,7 @@ udiv:
     push r2
     cmp r1,0
     beq div_error_
-    ldb r2,0
+    ldr r2,0
 div_loop_:
     cmp r0,r1
     blo div_done_
@@ -81,14 +81,14 @@ div:
     push r2
 
 ; Get result sign
-    ldb r2,0
+    ldr r2,0
     push r0
     push r1
     and r0,$80000000
     and r1,$80000000
     xor r0,r1
     beq div_same_sign_
-    ldb r2,1
+    ldr r2,1
 div_same_sign_:
     pop r1
     pop r0

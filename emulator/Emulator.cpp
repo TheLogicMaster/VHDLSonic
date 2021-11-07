@@ -444,6 +444,8 @@ uint32_t Emulator::readMicrocontroller(uint32_t address) {
     switch (address) {
         case 10 ... 15: // Seven segment displays
             return sevenSegmentDisplays[address - 10];
+        case 16 ... 51: // GPIO
+            return gpio[address - 16];
         case 120 ... 129: // Switches
             return switches[address - 120];
         case 130 ... 131: // Buttons

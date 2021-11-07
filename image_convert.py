@@ -9,11 +9,8 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Convert an image to a binary')
 parser.add_argument('image', help='The image to convert')
-parser.add_argument('-t', '--type', default='bg', choices=['sprite', 'bg'], type=str.lower, help="The type of image to convert")
 args = parser.parse_args()
-
 img = Image.open(args.image)
-
 output = bytearray()
 
 palette_img = Image.new('P', (16, 16))
@@ -36,7 +33,7 @@ palette_data = [  # https://lospec.com/palette-list/4-bit-rgb
     255, 255, 255,
 ]
 palette_img.putpalette(palette_data * 16)
-colorized = img.quantize(palette=palette_img)
+colorized = img.quantize(palette=palette_img, dither=0)
 
 
 # Convert a palette format image into tile bytes
@@ -46,26 +43,17 @@ def output_tile(image):
     for y in range(image.size[1]):
         for x in range(image.size[0]):
             buffer.append(pixels[x, y])
-    for i in range(int(len(buffer) / 2)):
-        output.append(buffer[i * 2] << 4 | buffer[i * 2 + 1])
+    for k in range(int(len(buffer) / 2)):
+        output.append(buffer[k * 2] << 4 | buffer[k * 2 + 1])
 
 
-# Convert to binary format
-if args.type == 'sprite':
-    if img.size[0] != 16 or img.size[1] != 16:
-        print("Image must be 16x16 pixels")
-        exit(-1)
+if not img.size[0] or not img.size[1] or img.size[0] % 8 or img.size[1] % 8:
+    print("Image must be a multiple of 8x8 pixels")
+    exit(-1)
 
-    output_tile(colorized.crop((0, 0, 8, 8)))  # Top left
-    output_tile(colorized.crop((8, 0, 16, 8)))  # Top right
-    output_tile(colorized.crop((0, 8, 8, 16)))  # Bottom left
-    output_tile(colorized.crop((8, 8, 16, 16)))  # Bottom right
-elif args.type == 'bg':
-    if img.size[0] != 8 or img.size[1] != 8:
-        print("Image must be 8x8 pixels")
-        exit(-1)
-
-    output_tile(colorized)
+for i in range(int(img.size[1] / 8)):
+    for j in range(int(img.size[0] / 8)):
+        output_tile(colorized.crop((j * 8, i * 8, j * 8 + 8, i * 8 + 8)))
 
 # Write binary file
 with open(os.path.splitext(sys.argv[1])[0] + ".bin", "wb") as f:
