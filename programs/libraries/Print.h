@@ -2,12 +2,12 @@
 
 #include "Sonic.h"
 
+#define PRINTF_BUFFER 64
+
 void print(const char* string) {
     while(*string)
         Serial = *(string++);
 }
-
-#define PRINTF_BUFFER 64
 
 void sprintf_internal(char *buffer, const char** format) {
     char *buffer_ptr = buffer;

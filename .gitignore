@@ -9,3 +9,5 @@ emulator/cmake-build-debug/
 /fpga/simulation/
 !/fpga/simulation/cpu.do
 !/fpga/simulation/vhdlsonic.mpf
+/emulator/Emscripten/web/
+/emulator/Emscripten/*.o

@@ -185,7 +185,7 @@ static void displayMainMenuBar() {
             if (ImGui::MenuItem("Exit"))
                 exited = true;
 #else
-            static const char *roms[] {"Hello World", "Hello World 2", "Snake", "IO Panel"};
+            static const char *roms[] {"C Snake", "Tetris", "Hello World", "Demo"};
             for (auto &memory: roms)
                 if (ImGui::MenuItem(memory))
                     loadRom(memory + std::string(".bin"));
@@ -709,7 +709,7 @@ int main(int argc, char* argv[]) {
     displayScale = 5;
     showPrintLog = false;
     controllerPeripheral = true;
-    loadRom("Snake.bin");
+    loadRom("Tetris.bin");
 #else
     // Parse program arguments
     if (argc == 1)

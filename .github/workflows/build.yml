@@ -34,36 +34,34 @@ jobs:
           cd ./vbcc
           echo n | make TARGET=sonic bin/vbccsonic
 
-      #- name: Install Emscripten Dependencies
-        #run: |
-          #wget -q https://github.com/emscripten-core/emsdk/archive/master.tar.gz
-          #tar -xvf master.tar.gz
-          #emsdk-master/emsdk update
-          #emsdk-master/emsdk install latest
-          #emsdk-master/emsdk activate latest
+      - name: Install Emscripten Dependencies
+        run: |
+          wget -q https://github.com/emscripten-core/emsdk/archive/master.tar.gz
+          tar -xvf master.tar.gz
+          emsdk-master/emsdk update
+          emsdk-master/emsdk install latest
+          emsdk-master/emsdk activate latest
 
-      #- name: Emscripten Build
-        #run: |
-          #pushd emsdk-master
-          #source ./emsdk_env.sh
-          #popd
-          #make -C ./emulator/Emscripten
+      - name: Emscripten Build
+        run: |
+          pushd emsdk-master
+          source ./emsdk_env.sh
+          popd
+          make -C ./emulator/Emscripten
 
-      #- name: Assemble programs
-        #run: |
-          #./fetch_songs.sh
-          #./assemble.sh
+      - name: Compile programs
+        run: |
+          ./compile.sh
 
       - name: Copy Linux Files
         run: |
           rm -rf ./Emulator
           mkdir ./Emulator
-          cp ./emulator/build/Emulator ./Emulator/Emulator.run
+          cp ./emulator/build/Emulator ./Emulator/Emulator
           cp ./vbcc/bin/vbccsonic ./Emulator
-          #cp ./programs/build/*.bin ./Emulator
-          #cp ./assembler.py ./Emulator
-          #cp ./image_convert.py ./Emulator
-          #cp -r ./docs ./Emulator
+          cp ./programs/build/*.bin ./Emulator
+          cp ./assembler.py ./Emulator
+          cp ./image_convert.py ./Emulator
 
       - name: Zip Linux Release
         uses: papeloto/action-zip@v1
@@ -71,29 +69,28 @@ jobs:
           files: ./Emulator
           dest: linux-${{ steps.get_version.outputs.VERSION }}.zip
 
-      #- name: Copy HTML Files
-        #run: |
-          #rm -rf ./Emulator
-          #mkdir ./Emulator
-          #cp ./emulator/Emscripten/web/* ./Emulator
-          #cp ./programs/build/*.bin ./Emulator
-          #cp -r ./docs ./Emulator
+      - name: Copy HTML Files
+        run: |
+          rm -rf ./Emulator
+          mkdir ./Emulator
+          cp ./emulator/Emscripten/web/* ./Emulator
+          cp ./programs/build/*.bin ./Emulator
 
-      #- name: Zip HTML Release
-        #uses: papeloto/action-zip@v1
-        #with:
-          #files: ./Emulator
-          #dest: html-${{ steps.get_version.outputs.VERSION }}.zip
+      - name: Zip HTML Release
+        uses: papeloto/action-zip@v1
+        with:
+          files: ./Emulator
+          dest: html-${{ steps.get_version.outputs.VERSION }}.zip
 
-      #- name: Deploy Demo
-        #uses: JamesIves/github-pages-deploy-action@3.6.1
-        #with:
-          #GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          #BRANCH: gh-pages
-          #FOLDER: Emulator
-          #CLEAN: true
-        #env:
-          #ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      - name: Deploy Demo
+        uses: JamesIves/github-pages-deploy-action@3.6.1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: gh-pages
+          FOLDER: Emulator
+          CLEAN: true
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
 
       - name: Build plugin
         run: |
@@ -117,7 +114,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           hub release edit -a ./linux-${{ steps.get_version.outputs.VERSION }}.zip -m "" ${{ steps.get_version.outputs.VERSION }}
-          #hub release edit -a ./html-${{ steps.get_version.outputs.VERSION }}.zip -m "" ${{ steps.get_version.outputs.VERSION }}
+          hub release edit -a ./html-${{ steps.get_version.outputs.VERSION }}.zip -m "" ${{ steps.get_version.outputs.VERSION }}
           hub release edit -a ./plugin-${{ steps.get_version.outputs.VERSION }}.jar -m "" ${{ steps.get_version.outputs.VERSION }}
 
   Windows:
@@ -163,11 +160,10 @@ jobs:
         with:
           python-version: '3.9'
 
-      #- name: Assemble programs
-        #shell: bash
-        #run: |
-          #./fetch_songs.sh
-          #./assemble.sh
+      - name: Assemble programs
+        shell: bash
+        run: |
+          ./compile.sh
 
       - name: Copy Windows Files
         shell: bash
@@ -176,10 +172,9 @@ jobs:
           cp emulator/build/*.exe ./build
           cp emulator/build/*.dll ./build
           cp vbcc/bin/vbccsonic ./build
-          #cp programs/build/*.bin ./build
-          #cp assembler.py ./build
-          #cp image_convert.py ./build
-          #cp -r docs ./build
+          cp programs/build/*.bin ./build
+          cp assembler.py ./build
+          cp image_convert.py ./build
 
       - name: Zip Windows Release
         uses: papeloto/action-zip@v1
