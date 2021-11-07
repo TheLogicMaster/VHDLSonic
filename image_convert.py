@@ -33,7 +33,7 @@ palette_data = [  # https://lospec.com/palette-list/4-bit-rgb
     255, 255, 255,
 ]
 palette_img.putpalette(palette_data * 16)
-colorized = img.quantize(palette=palette_img, dither=0)
+colorized = img.convert('RGB').quantize(palette=palette_img, dither=0)
 
 
 # Convert a palette format image into tile bytes

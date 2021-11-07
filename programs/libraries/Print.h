@@ -9,13 +9,12 @@ void print(const char* string) {
 
 #define PRINTF_BUFFER 64
 
-void printf(char* format, ...) {
-    char buffer[PRINTF_BUFFER];
+void sprintf_internal(char *buffer, const char** format) {
     char *buffer_ptr = buffer;
 
-    char *format_ptr = format;
+    const char *format_ptr = *format;
 
-    int *arg_ptr = (int*)&format - 1;
+    int *arg_ptr = (int*)format - 1;
 
     int count;
     char digits[5];
@@ -76,6 +75,14 @@ void printf(char* format, ...) {
         format_ptr++;
     }
     *buffer_ptr = 0;
+}
 
+void sprintf(char *buffer, const char* format, ...) {
+    sprintf_internal(buffer, &format);
+}
+
+void printf(const char* format, ...) {
+    char buffer[PRINTF_BUFFER];
+    sprintf_internal(buffer, &format);
     print(buffer);
 }
