@@ -807,7 +807,6 @@ int main(int argc, char* argv[]) {
     disabledColor = new ImVec4(0.7f,0.7f,0.7f,1.0f);
 
 #ifdef __EMSCRIPTEN__
-    processorSpeed = 2;
     emscripten_set_main_loop_arg(mainLoop, nullptr, 0, true);
     IM_UNUSED(setupPersistenceHandler);
 #else
