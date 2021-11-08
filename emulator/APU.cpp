@@ -12,7 +12,7 @@ int APU::update() {
 
     uint8_t wave1Sample = 0;
 
-    if (!square1Freq or square1Repeat or square1State < square1Length * 50001 / 1000) {
+    if (square1Freq and (square1Repeat or square1State < square1Length * 50001 / 1000)) {
         uint32_t period = (50001 / square1Freq);
         uint32_t constrained = square1State % period;
 //        int volumeOffset = square1VolumeSpeed ? square1State * square1VolumeSpeed * 255 / (50001) : 0;
@@ -32,11 +32,11 @@ void APU::reset() {
     std::queue<uint8_t>().swap(samples);
     ticks = 0;
 
-    square1State = 0;
-    square1Freq = 100;
-    square1Duty = 3;
-    square1Length = 1000;
-    square1Repeat = true;
+//    square1State = 0;
+//    square1Freq = 100;
+//    square1Duty = 3;
+//    square1Length = 1000;
+//    square1Repeat = true;
 //    square1VolumeInit = 255;
 //    square1VolumeInc = false;
 //    square1VolumeSpeed = 1;
