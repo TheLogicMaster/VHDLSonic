@@ -2,8 +2,8 @@
 
 ; CPU ports
     def ie=$20000
-    def if=$20001
-    def random=$20002
+    def if=$20004
+    def random=$20008
 
 ; Graphics ports
     def render=$30000

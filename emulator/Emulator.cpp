@@ -492,9 +492,9 @@ uint32_t Emulator::readUint32(uint32_t address) {
             return reverseWordBytes(*(uint32_t*)&ram[address & ~0x3 - 0x18000]);
         case 0x20000:
             return interruptEnable;
-        case 0x20001:
+        case 0x20004:
             return interruptFlags;
-        case 0x20002:
+        case 0x20008:
             return rand();
         case 0x30000 ... 0x3FFFF:
             return gpu.read((address - 0x30000) / 4);
@@ -513,8 +513,11 @@ void Emulator::writeUint32(uint32_t address, uint32_t value) {
         case 0x20000:
             interruptEnable = value;
             break;
-        case 0x20001:
+        case 0x20004:
             interruptFlags = value;
+            break;
+        case 0x20008:
+            srand(value);
             break;
         case 0x30000 ... 0x3FFFF:
             gpu.write((address - 0x30000) / 4, value);

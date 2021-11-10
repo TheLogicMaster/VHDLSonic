@@ -10,10 +10,10 @@ entity cpu is
 		reset : in std_logic;
 		int_in : in std_logic_vector(7 downto 0);
 		data_in : in std_logic_vector(31 downto 0);
-		data_out : out std_logic_vector(31 downto 0);
+		data_out : buffer std_logic_vector(31 downto 0);
 		address : buffer std_logic_vector(31 downto 0);
 		data_mask : out std_logic_vector(3 downto 0);
-		write_en : out std_logic;
+		write_en : buffer std_logic;
 		reset_int : out std_logic
 	);
 end entity;
@@ -92,6 +92,16 @@ architecture impl of cpu is
 		);
 	end component;
 	
+	component random is
+		port (
+			clock	: in std_logic;
+			reset : in std_logic;
+			seed : in std_logic_vector(31 downto 0);
+			seed_write : in std_logic;
+			rand : out std_logic_vector(31 downto 0)
+		);
+	end component;
+	
 	-- Registers
 	signal state : state_type;
 	signal reg_file : reg_file_type;
@@ -102,12 +112,19 @@ architecture impl of cpu is
 	signal interrupt_enable : std_logic_vector(7 downto 0);
 	signal interrupt_flags : std_logic_vector(7 downto 0);
 	
-	-- Signals
+	-- CPU signals
+	signal data : std_logic_vector(31 downto 0);
+	
+	-- ALU signals
 	signal alu_op_1 : std_logic_vector(31 downto 0);
 	signal alu_op_2 : std_logic_vector(31 downto 0);
 	signal alu_mode : std_logic_vector(3 downto 0);
 	signal alu_result : std_logic_vector(31 downto 0);
 	signal alu_flags : std_logic_vector(3 downto 0);
+	
+	-- Rand signals
+	signal random_seed_write : std_logic;
+	signal random_value : std_logic_vector(31 downto 0);
 	
 	-- Aliases
 	alias opcode is instr(31 downto 24);
@@ -133,11 +150,20 @@ begin
 			result => alu_result,
 			flags_out => alu_flags
 		);
+		
+	rand : random
+		port map (
+			clock => clock,
+			reset => reset,
+			seed => data_out,
+			seed_write => random_seed_write,
+			rand => random_value
+		);
 
 	alu_op_1 <= std_logic_vector(reg_file(to_integer(source_reg)));
 	alu_op_2 <= 
 		std_logic_vector(to_unsigned(1, 32)) when opcode >= 16#3E# and opcode <= 16#3F#
-		else data_in when state = s_alu_imm_2
+		else data when state = s_alu_imm_2
 		else std_logic_vector(reg_file(to_integer(operand_reg)));
 	alu_mode <=
 		std_logic_vector(to_unsigned((to_integer(opcode) - 16#26#) / 2, 4)) when opcode >= 16#26# and opcode <= 16#3B#
@@ -145,6 +171,12 @@ begin
 		else std_logic_vector(to_unsigned(1, 4)) when opcode = 16#3E#
 		else x"0";
 		
+	data <=
+		x"000000" & interrupt_enable when address = x"00020000"
+		else x"000000" & interrupt_flags when address = x"00020004"
+		else random_value when address = x"00020008"
+		else data_in;
+	
 	data_out <= -- Todo: Could be re-organized like data_mask to not repeat as much
 		std_logic_vector(shift_left(reg_file(to_integer(source_reg)), (3 - to_integer(unsigned(address(1 downto 0)))) * 8)) 
 			when (opcode = to_unsigned(16#1C#, 8) or opcode = to_unsigned(16#1F#, 8) or opcode = to_unsigned(16#22#, 8)) 
@@ -188,6 +220,8 @@ begin
 		else std_logic_vector(reg_file(to_integer(operand_reg)) + cache) 
 			when state = s_load_rel_3 or state = s_load_rel_4 or state = s_store_rel_3 or state = s_store_rel_4
 		else std_logic_vector(pc);
+	
+	random_seed_write <= '1' when write_en = '1' and address = x"00020008" else '0';
 	
 	reset_int <= '1' when state = s_reset else '0';
 	
@@ -240,6 +274,14 @@ begin
 			if rising_edge(clock) then
 				interrupts := interrupt_flags or int_in;
 				
+				if write_en = '1' and address = x"00020000" then
+					interrupt_enable <= data_out(7 downto 0);
+				end if;
+				
+				if write_en = '1' and address = x"00020004" then
+					interrupts := data_out(7 downto 0);
+				end if;
+				
 				case state is
 					-- Decode instuction 1
 					when s_decode_1 => 
@@ -261,9 +303,9 @@ begin
 					
 					-- Decode instuction 2
 					when s_decode_2 =>
-						instr <= unsigned(data_in);
+						instr <= unsigned(data);
 						pc <= pc + 4;
-						case to_integer(unsigned(data_in(31 downto 24))) is
+						case to_integer(unsigned(data(31 downto 24))) is
 							when 16#00# => state <= s_decode_1; -- NOP
 							when 16#01# to 16#0F# => state <= s_branch_1; -- Branch instructions
 							when 16#12# => state <= s_load_imm_1; -- Load immediate
@@ -274,10 +316,10 @@ begin
 							when 16#1F# to 16#21# => state <= s_store_ind_1; -- Indexed store instructions
 							when 16#22# to 16#24# => state <= s_store_rel_1; -- Relative store instructions
 							when 16#25# => -- TFR
-								reg_file(to_integer(unsigned(data_in(23 downto 20)))) <= reg_file(to_integer(unsigned(data_in(19 downto 16))));
+								reg_file(to_integer(unsigned(data(23 downto 20)))) <= reg_file(to_integer(unsigned(data(19 downto 16))));
 								state <= s_decode_1;
 							when 16#26# to 16#3F# => -- ALU instructions
-								if data_in(24) = '1' or data_in(31 downto 24) = x"3E" or data_in(31 downto 24) = x"3F" then
+								if data(24) = '1' or data(31 downto 24) = x"3E" or data(31 downto 24) = x"3F" then
 									state <= s_alu_reg;
 								else
 									state <= s_alu_imm_1;
@@ -300,7 +342,7 @@ begin
 								state <= s_pop_1; -- POP
 							when 16#46# => state <= s_jmp_imm_1; -- JMP imm
 							when 16#47# => -- JMP reg
-								pc <= reg_file(to_integer(unsigned(data_in(23 downto 20))));
+								pc <= reg_file(to_integer(unsigned(data(23 downto 20))));
 								state <= s_decode_1;
 							when 16#48# => state <= s_jsr_1; -- JSR
 							when 16#49# => state <= s_ret_1; -- RET
@@ -408,7 +450,7 @@ begin
 					
 					-- Branch instructions 2
 					when s_branch_2 =>
-						pc <= pc + unsigned(resize(signed(data_in), 32)) + to_unsigned(4, 32);
+						pc <= pc + unsigned(resize(signed(data), 32)) + to_unsigned(4, 32);
 						state <= s_decode_1;
 					
 					-- Load immediate 1
@@ -416,8 +458,8 @@ begin
 					
 					-- Load immediate 2
 					when s_load_imm_2 =>
-						reg_file(to_integer(source_reg)) <= unsigned(data_in);
-						if data_in = x"00000000" then
+						reg_file(to_integer(source_reg)) <= unsigned(data);
+						if data = x"00000000" then
 							flag_z <= '1';
 						else
 							flag_z <= '0';
@@ -430,7 +472,7 @@ begin
 					
 					-- Load absolute 2
 					when s_load_abs_2 =>
-						cache <= unsigned(data_in);
+						cache <= unsigned(data);
 						pc <= pc + 4;
 						state <= s_load_abs_3;
 					
@@ -450,7 +492,7 @@ begin
 					
 					-- Load relative 2
 					when s_load_rel_2 =>
-						cache <= unsigned(data_in);
+						cache <= unsigned(data);
 						pc <= pc + 4;
 						state <= s_load_rel_3;
 					
@@ -461,15 +503,15 @@ begin
 					when s_load_abs_4 | s_load_ind_3 | s_load_rel_4 =>
 						case to_integer(opcode) is
 							when 16#13# | 16#16# | 16#19# =>
-								reg_file(to_integer(source_reg)) <= shift_right(unsigned(data_in), (3 - to_integer(unsigned(address(1 downto 0)))) * 8);
+								reg_file(to_integer(source_reg)) <= shift_right(unsigned(data), (3 - to_integer(unsigned(address(1 downto 0)))) * 8);
 							when 16#14# | 16#17# | 16#1A# =>
-								reg_file(to_integer(source_reg)) <= shift_right(unsigned(data_in), to_integer(unsigned((not address(1 downto 1)) & '0')) * 8);
+								reg_file(to_integer(source_reg)) <= shift_right(unsigned(data), to_integer(unsigned((not address(1 downto 1)) & '0')) * 8);
 							when 16#15# | 16#18# | 16#1B# =>
-								reg_file(to_integer(source_reg)) <= unsigned(data_in);
+								reg_file(to_integer(source_reg)) <= unsigned(data);
 							when others => null; -- Illegal state
 						end case;
 						
-						if data_in = x"00000000" then
+						if data = x"00000000" then
 							flag_z <= '1';
 						else
 							flag_z <= '0';
@@ -486,7 +528,7 @@ begin
 					
 					-- Store absolute 2
 					when s_store_abs_2 =>
-						cache <= unsigned(data_in);
+						cache <= unsigned(data);
 						pc <= pc + 4;
 						state <= s_store_abs_3;
 					
@@ -515,7 +557,7 @@ begin
 					
 					-- Store relative 2
 					when s_store_rel_2 =>
-						cache <= unsigned(data_in);
+						cache <= unsigned(data);
 						pc <= pc + 4;
 						state <= s_store_rel_3;
 					
@@ -558,7 +600,7 @@ begin
 					
 					-- POP 2
 					when s_pop_2 =>
-						reg_file(to_integer(source_reg)) <= unsigned(data_in);
+						reg_file(to_integer(source_reg)) <= unsigned(data);
 						state <= s_decode_1;
 					
 					-- JMP immediate 1
@@ -566,7 +608,7 @@ begin
 					
 					-- JMP immediate 1
 					when s_jmp_imm_2 => 
-						pc <= unsigned(data_in);
+						pc <= unsigned(data);
 						state <= s_decode_1;
 					
 					-- JSR 1
@@ -574,7 +616,7 @@ begin
 					
 					-- JSR 2
 					when s_jsr_2 =>
-						cache <= unsigned(data_in);
+						cache <= unsigned(data);
 						pc <= pc + 4;
 						state <= s_jsr_3;
 					
@@ -597,7 +639,7 @@ begin
 					
 					-- RET 3
 					when s_ret_3 =>
-						pc <= unsigned(data_in);
+						pc <= unsigned(data);
 						state <= s_decode_1;
 					
 					-- INT 1
@@ -605,7 +647,7 @@ begin
 					
 					-- INT 2
 					when s_int_2 =>
-						interrupts := interrupts or std_logic_vector(shift_left(to_unsigned(1, 8), to_integer(unsigned(data_in))));
+						interrupts := interrupts or std_logic_vector(shift_left(to_unsigned(1, 8), to_integer(unsigned(data))));
 						pc <= pc + 4;
 						state <= s_decode_1;
 					
@@ -619,7 +661,7 @@ begin
 					
 					-- RTI 3
 					when s_rti_3 => 
-						pc <= unsigned(data_in);
+						pc <= unsigned(data);
 						sp <= sp - 4;
 						state <= s_rti_4;
 					
@@ -628,7 +670,7 @@ begin
 					
 					-- RTI 5
 					when s_rti_5 => 
-						status <= data_in(4 downto 0);
+						status <= data(4 downto 0);
 						state <= s_decode_1;
 					
 					-- Halted
