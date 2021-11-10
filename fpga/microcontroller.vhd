@@ -36,11 +36,36 @@ architecture impl of microcontroller is
 		);
 	end component;
 	
+	component uart_controller is
+		port (
+			clock : in std_logic;
+			reset : in std_logic;
+			write_en : in std_logic;
+			data : in std_logic_vector(7 downto 0);
+			rx : in std_logic;
+			pop : in std_logic;
+			full : out std_logic;
+			tx : out std_logic;
+			received : out std_logic_vector(7 downto 0);
+			available : out std_logic_vector(7 downto 0)
+		);
+	end component;
+	
+	-- Uart signals
+	signal uart_available : std_logic_vector(7 downto 0);
+	signal uart_received : std_logic_vector(7 downto 0);
+	signal uart_tx : std_logic;
+	signal uart_write : std_logic;
+	signal uart_pop : std_logic;
+	signal uart_full : std_logic;
+	
+	-- Registers
 	signal seg7_states : seg7_array;
 	signal arduino_states : std_logic_vector(15 downto 0);
 	signal arduino_modes : std_logic_vector(15 downto 0);
 	signal gpio_states : std_logic_vector(35 downto 0);
 	signal gpio_modes : std_logic_vector(35 downto 0);
+	signal uart_enable : std_logic;
 begin
 	seg7_0 : seg7 port map(seg7_states(0), hex0);
 	seg7_1 : seg7 port map(seg7_states(1), hex1);
@@ -49,6 +74,20 @@ begin
 	seg7_4 : seg7 port map(seg7_states(4), hex4);
 	seg7_5 : seg7 port map(seg7_states(5), hex5);
 	
+	uart : uart_controller
+		port map (
+			clock => clock,
+			reset => reset,
+			write_en => uart_write,
+			data => data_in(7 downto 0),
+			rx => arduino(0),
+			pop => uart_pop,
+			full => uart_full,
+			tx => uart_tx,
+			received => uart_received,
+			available => uart_available
+		);
+	
 	-- Port read logic
 	process(all)
 		variable index : integer;
@@ -56,14 +95,23 @@ begin
 		index := (to_integer(unsigned(address)) - 16#40000#) / 4;
 		
 		case index is
+			when 0 to 9 => data_out <= x"0000000" & "000" & leds(index);
          when 10 to 15 => data_out <= x"0000000" & seg7_states(index - 10);
+			when 16 to 51 => data_out <= x"0000000" & "000" & gpio(index - 16);
+			when 52 to 87 => data_out <= x"0000000" & "000" & gpio_modes(index - 52);
+			when 88 to 103 => data_out <= x"0000000" & "000" & arduino(index - 88);
+			when 104 to 119 => data_out <= x"0000000" & "000" & arduino_modes(index - 104);
 			when 120 to 129 => data_out <= x"0000000" & "000" & switches(index - 120);
 			when 130 to 131 => data_out <= x"0000000" & "000" & buttons(index - 130);
+			when 132 => data_out <= x"000000" & uart_received;
+			when 133 => data_out <= x"000000" & uart_available;
+			when 134 => data_out <= x"0000000" & "000" & uart_full;
+			when 135 => data_out <= x"0000000" & "000" & uart_enable;
 			when others => data_out <= x"00000000";
 		end case;
 	end process;
 	
-	-- Port write logic
+	-- Clocked write logic
 	process(all)
 		variable index : integer;
 		variable bool : std_logic;
@@ -93,8 +141,28 @@ begin
 				when 52 to 87 => gpio_modes(index - 52) <= bool;
 				when 88 to 103 => arduino_states(index - 88) <= bool;
 				when 104 to 119 => arduino_modes(index - 104) <= bool;
+				when 135 => uart_enable <= bool;
 				when others => null;
 			end case;
+		end if;
+	end process;
+	
+	-- Non-clocked write logic
+	process(all)
+		variable index : integer;
+	begin
+		index := (to_integer(unsigned(address)) - 16#40000#) / 4;
+		
+		if index = 132 and write_en = '1' then
+			uart_write <= '1';
+		else
+			uart_write <= '0';
+		end if;
+	
+		if index = 133 and write_en = '1' then
+			uart_pop <= '1';
+		else
+			uart_pop <= '0';
 		end if;
 	end process;
 	
@@ -103,7 +171,11 @@ begin
 	begin
 		for i in 0 to 15 loop
 			if arduino_modes(i) = '1' then
-				arduino(i) <= arduino_states(i);
+				if i = 1 and uart_enable = '1' then
+					arduino(i) <= uart_tx;
+				else
+					arduino(i) <= arduino_states(i);
+				end if;
 			else
 				arduino(i) <= 'Z';
 			end if;

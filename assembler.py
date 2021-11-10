@@ -15,7 +15,7 @@ line_number = 0
 file = ""
 output = bytearray()
 address = 0
-data_address = 0x10000
+data_address = 0x18000
 includes = []
 labels = {}
 last_label = None
@@ -678,10 +678,10 @@ def main():
             error("No such label: " + label, -1)
         offset = 0
         if memory:
-            if labels[label] < 0x10000:
-                offset = 0x10000
-            else:
+            if labels[label] < 0x18000:
                 offset = 0x18000
+            else:
+                offset = 0x1E000
         write_word_in_output(addr, labels[label] + offset)
 
     # Substitute labels for relative jumps
@@ -693,12 +693,13 @@ def main():
         write_word_in_output(addr, offset & 0xFFFFFFFF)
 
     # Ensure ROM size
+    # Todo: Verify allocated RAM size
     if memory:
-        ensure_output_size(0x8000)
-        if address > 0x8000:
+        ensure_output_size(0x6000)
+        if address > 0x6000:
             error("In-memory program size exceeded", -1)
     else:
-        if address > 0x10000:
+        if address > 0x18000:
             error("Program size exceeded", -1)
 
     # Save machine code results

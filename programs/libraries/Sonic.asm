@@ -1,9 +1,8 @@
 ; VHDLSonic
 
-; Special register ports
+; CPU ports
     def ie=$20000
     def if=$20001
-
     def random=$20002
 
 ; Graphics ports
@@ -24,7 +23,10 @@
     def gpio=$40040
     def gpio_modes=$400D0
     def arduino=$40160
-    def arduino_modes=$40416
+    def arduino_modes=$401A0
     def switches=$401E0
     def buttons=$40208
     def serial=$40210
+    def serial_available=$40214
+    def serial_full=$40218
+    def uart_enable=$4021C

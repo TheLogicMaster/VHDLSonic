@@ -69,3 +69,8 @@ incremental_db/
 db/
 _output_files/
 PLLJ_PLLSPE_INFO.txt
+
+uart/
+uart.sopcinfo
+greybox_tmp/
+.qsys_edit/

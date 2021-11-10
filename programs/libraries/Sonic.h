@@ -12,6 +12,9 @@ extern int Arduino_Modes[16];
 extern int Switches[10];
 extern int Buttons[2];
 extern int Serial;
+extern int Serial_Available;
+extern int Serial_Full;
+extern int UART_Enable;
 
 extern int Render;
 extern int H_Scroll, V_Scroll;

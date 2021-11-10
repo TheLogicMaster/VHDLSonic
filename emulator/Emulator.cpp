@@ -10,12 +10,12 @@
 Emulator::Emulator() {
     srand(time(nullptr));
     rom = memory;
-    ram = memory + 0x10000;
+    ram = memory + 0x18000;
 }
 
 void Emulator::load(uint8_t *romData, long size) {
-    memset(rom, 0, 0x10000);
-    memcpy(rom, romData, size);
+    memset(rom, 0, 0x18000);
+    memcpy(rom, romData, std::min(size, 0x18000l));
 }
 
 int Emulator::run() {
@@ -326,7 +326,7 @@ void Emulator::reset() {
     status = 0;
     interruptEnable = 0;
     interruptFlags = 0;
-    memset(ram, 0, 0x10000);
+    memset(ram, 0, 0x8000);
     memset(lights, 0, 10);
     memset(sevenSegmentDisplays, 0, 6);
     memset(registers, 0, 16 * 4);
@@ -450,6 +450,10 @@ uint32_t Emulator::readMicrocontroller(uint32_t address) {
             return switches[address - 120];
         case 130 ... 131: // Buttons
             return buttons[address - 130];
+        case 132: // Serial
+            return uartInBuffer.front();
+        case 133: // Serial available
+            return (uint8_t)uartInBuffer.size();
         default:
             return 0;
     }
@@ -471,6 +475,10 @@ void Emulator::writeMicrocontroller(uint32_t address, uint32_t value) {
             if (printBuffer.length() > PRINT_BUFFER)
                 printBuffer.erase(0, 1);
             break;
+        case 133: // Serial available
+            if (!uartInBuffer.empty())
+                uartInBuffer.pop();
+            break;
         default:
             break;
     }
@@ -478,10 +486,10 @@ void Emulator::writeMicrocontroller(uint32_t address, uint32_t value) {
 
 uint32_t Emulator::readUint32(uint32_t address) {
     switch (address) {
-        case 0x00000 ... 0x0FFFF - 3:
+        case 0x00000 ... 0x17FFF - 3:
             return reverseWordBytes(*(uint32_t*)&rom[address & ~0x3]);
-        case 0x10000 ... 0x1FFFF - 3:
-            return reverseWordBytes(*(uint32_t*)&ram[address & ~0x3 - 0x10000]);
+        case 0x18000 ... 0x1FFFF - 3:
+            return reverseWordBytes(*(uint32_t*)&ram[address & ~0x3 - 0x18000]);
         case 0x20000:
             return interruptEnable;
         case 0x20001:
@@ -499,8 +507,8 @@ uint32_t Emulator::readUint32(uint32_t address) {
 
 void Emulator::writeUint32(uint32_t address, uint32_t value) {
     switch (address) {
-        case 0x10000 ... 0x1FFFF - 3:
-            *(uint32_t*)&ram[address & ~0x3 - 0x10000] = reverseWordBytes(value);
+        case 0x18000 ... 0x1FFFF - 3:
+            *(uint32_t*)&ram[address & ~0x3 - 0x18000] = reverseWordBytes(value);
             break;
         case 0x20000:
             interruptEnable = value;
