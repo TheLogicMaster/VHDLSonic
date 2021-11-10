@@ -454,6 +454,8 @@ uint32_t Emulator::readMicrocontroller(uint32_t address) {
             return uartInBuffer.front();
         case 133: // Serial available
             return (uint8_t)uartInBuffer.size();
+        case 136 ... 141:
+            return analogDigitalConverters[address - 136];
         default:
             return 0;
     }

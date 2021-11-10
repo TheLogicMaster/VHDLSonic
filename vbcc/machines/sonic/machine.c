@@ -101,10 +101,11 @@ static struct Typ ityp = {INT};
 static char memory_suffixes[5] = {'?', 'b', 'w', '?', 'r'};
 
 // IO port definitions
-#define PORT_COUNT 25
+#define PORT_COUNT 26
 static char *port_names[PORT_COUNT] = {
     "IE", "IF", "Random", 
-    "LEDs", "Seven_Segment", "GPIO", "GPIO_Modes", "Arduino", "Arduino_Modes", "Switches", "Buttons", "Serial", "Serial_Available", "Serial_Full", "UART_Enable",
+    "LEDs", "Seven_Segment", "GPIO", "GPIO_Modes", "Arduino", "Arduino_Modes", "Switches", "Buttons", "Serial", "Serial_Available", 
+    "Serial_Full", "UART_Enable", "ADC",
     "Render", "H_Scroll", "V_Scroll", "Window_X", "Window_Y", "Palette", "Tile_Data", "BG_Data", "Win_Data", "Sprites"
 };
 

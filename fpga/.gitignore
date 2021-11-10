@@ -74,3 +74,5 @@ uart/
 uart.sopcinfo
 greybox_tmp/
 .qsys_edit/
+adc/
+adc.sopcinfo

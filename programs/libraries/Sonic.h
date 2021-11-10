@@ -15,6 +15,7 @@ extern int Serial;
 extern int Serial_Available;
 extern int Serial_Full;
 extern int UART_Enable;
+extern int ADC[6];
 
 extern int Render;
 extern int H_Scroll, V_Scroll;

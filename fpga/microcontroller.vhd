@@ -28,6 +28,7 @@ end entity;
 
 architecture impl of microcontroller is
 	type seg7_array is array (0 to 5) of std_logic_vector(3 downto 0);
+	type adc_array is array (0 to 5) of std_logic_vector(11 downto 0);
 
 	component seg7 is
 		port (
@@ -51,6 +52,21 @@ architecture impl of microcontroller is
 		);
 	end component;
 	
+	component adc is
+		port (
+			clock : in std_logic := '0';
+			ch0 : out std_logic_vector(11 downto 0);
+			ch1 : out std_logic_vector(11 downto 0);
+			ch2 : out std_logic_vector(11 downto 0);
+			ch3 : out std_logic_vector(11 downto 0);
+			ch4 : out std_logic_vector(11 downto 0);
+			ch5 : out std_logic_vector(11 downto 0);
+			ch6 : out std_logic_vector(11 downto 0);
+			ch7 : out std_logic_vector(11 downto 0);
+			reset : in std_logic := '0'
+		);
+	end component;
+	
 	-- Uart signals
 	signal uart_available : std_logic_vector(7 downto 0);
 	signal uart_received : std_logic_vector(7 downto 0);
@@ -58,6 +74,8 @@ architecture impl of microcontroller is
 	signal uart_write : std_logic;
 	signal uart_pop : std_logic;
 	signal uart_full : std_logic;
+	
+	signal adc_states : adc_array;
 	
 	-- Registers
 	signal seg7_states : seg7_array;
@@ -88,6 +106,18 @@ begin
 			available => uart_available
 		);
 	
+	adc_driver : adc
+		port map (
+			clock => clock,
+			reset => reset,
+			ch0 => adc_states(0),
+			ch1 => adc_states(1),
+			ch2 => adc_states(2),
+			ch3 => adc_states(3),
+			ch4 => adc_states(4),
+			ch5 => adc_states(5)
+		);
+	
 	-- Port read logic
 	process(all)
 		variable index : integer;
@@ -107,6 +137,7 @@ begin
 			when 133 => data_out <= x"000000" & uart_available;
 			when 134 => data_out <= x"0000000" & "000" & uart_full;
 			when 135 => data_out <= x"0000000" & "000" & uart_enable;
+			when 136 to 141 => data_out <= x"00000" & adc_states(index - 136);
 			when others => data_out <= x"00000000";
 		end case;
 	end process;
