@@ -1009,12 +1009,20 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                     emit_inline_asm(f, ic->q1.v->fi->inline_asm);
                     emit(f, "\n");
                 } else {
-                    emit(f, "; Call Function \"%s\"\n", ic->q1.v->identifier);
+                    emit_ic_comment(f, ic);
                     if (!hasPushed)
                         emit(f, "\tadd sp,%i\n", 4 - stackframe % 4);
                     pushed = 0;
                     hasPushed = 0;
-                    emit(f, "\tjsr _%s\n", ic->q1.v->identifier);
+                    if (ic->q1.flags & DREFOBJ) {
+                        ic->q1.flags &= ~DREFOBJ; // Hack to support function pointers
+                        int newLabel = ++label;
+                        emit(f, "\tldr r0,label%d\n", newLabel);
+                        emit(f, "\tpush r0\n");
+                        emit(f, "\tjmp r%d\n", get_param_reg(f, 4, 0, ic->q1));
+                        emit(f, "label%d:\n", newLabel);
+                    } else
+                        emit(f, "\tjsr _%s\n", ic->q1.v->identifier);
                     emit(f, "\tsub sp,%i\n", pushedargsize(ic) + 4 - stackframe % 4);
                 }
                 break;
