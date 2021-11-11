@@ -818,7 +818,8 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                 if (reg2 != 1)
                     emit(f, "\ttfr r1,r%i\n", reg2);
                 emit(f, "\tjsr %s%s\n", q1typ(ic) & UNSIGNED ? "u" : "", code == DIV ? "div" : "mod");
-                store_reg(f, sizetab[ztyp(ic) & NQ], 0, ic->z);
+                emit(f, "\ttfr r1,r0\n");
+                store_reg(f, sizetab[ztyp(ic) & NQ], 1, ic->z);
                 emit(f, "\n");
                 break;
             }

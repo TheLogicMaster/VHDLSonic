@@ -185,7 +185,7 @@ static void displayMainMenuBar() {
             if (ImGui::MenuItem("Exit"))
                 exited = true;
 #else
-            static const char *roms[] {"C Snake", "Tetris", "Hello World", "Demo"};
+            static const char *roms[] {"C Snake", "Tetris", "Hello World", "Demo", "Dice", "Parrot"};
             for (auto &memory: roms)
                 if (ImGui::MenuItem(memory))
                     loadRom(memory + std::string(".bin"));
@@ -279,12 +279,12 @@ static void displayMemoryViewers() {
     if (romViewer->Open) {
         ImGui::SetNextWindowSize(ImVec2(0, 218), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(506, 25), ImGuiCond_FirstUseEver);
-        romViewer->DrawWindow("ROM Viewer", emulator->getROM(), 0x10000);
+        romViewer->DrawWindow("ROM Viewer", emulator->getROM(), 0x18000);
     }
     if (ramEditor->Open) {
         ImGui::SetNextWindowSize(ImVec2(0, 218), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(506, 248), ImGuiCond_FirstUseEver);
-        ramEditor->DrawWindow("RAM Editor", emulator->getRAM(), 0x10000, 0x10000);
+        ramEditor->DrawWindow("RAM Editor", emulator->getRAM(), 0x8000, 0x18000);
     }
 }
 

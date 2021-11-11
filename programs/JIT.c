@@ -2,7 +2,7 @@
 
 #include "libraries/Sonic.h"
 
-const int jit[10] = {
+const int jit[5] = {
     0x3E000000, // INC r0
     0x1E000000, // STR r0,[{seven_segment_0}]
     0x00040028,
@@ -11,5 +11,5 @@ const int jit[10] = {
 };
 
 int main() {
-    ((void (*)(void))&jit)();
+    ((void (*)(void))&jit)(); // Basically magic
 }
