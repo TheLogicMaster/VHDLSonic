@@ -6,10 +6,10 @@ void set_sprite(int index, int first_tile, int x, int y, int h_flip, int v_flip)
     Sprites[index] = first_tile << 20 | x << 11 | y << 2 | h_flip << 1 | v_flip;
 }
 
-void copy_tiles(const char* source, int first_tile, int count) {
-    int offset  = first_tile * 32;
-    for (int i = 0; i < count * 32; i++)
-        Tile_Data[i + offset] = source[i];
+void copy_tiles(const int* source, int first_tile, int count) {
+    int offset = first_tile * 8;
+        for (int i = 0; i < count * 8; i++)
+            Tile_Data[i + offset] = source[i];
 }
 
 void draw_text(const char* string, int font_first_tile, int x, int y) {

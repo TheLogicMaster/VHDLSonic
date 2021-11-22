@@ -128,8 +128,8 @@ int main() {
     sei();
 
     // Set Background Data
-    for (int i = 0; i < 32; i++)
-        Tile_Data[i] = 0x55;
+    for (int i = 0; i < 8; i++)
+        Tile_Data[i] = 0x55555555;
     copy_tiles(apple, 1, 1);
     copy_tiles(snake_body, 5, 1);
     copy_tiles(snake_head, 9, 1);

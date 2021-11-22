@@ -55,7 +55,7 @@ copy_tiles:
     mul y,128
     add y,{tile_data}
 copy_tiles_loop_:
-    ldb r4,x++
+    ldr r4,x++
     str r4,y++
     cmp x,r3
     bne copy_tiles_loop_

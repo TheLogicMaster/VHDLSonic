@@ -13,9 +13,9 @@
     def window_y=$30010
     def palette=$30014
     def tile_data=$30054
-    def bg_data=$38054
-    def win_data=$3C054
-    def sprites=$3D314
+    def bg_data=$32054
+    def win_data=$36054
+    def sprites=$37314
 
 ; Microcontroller ports
     def leds=$40000

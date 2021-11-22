@@ -15,14 +15,13 @@
 #define WORLD_HEIGHT 512
 
 #define TILE_COUNT 256
-#define TILE_SIZE 32
 #define TILE_WIDTH 8
 
 #define SPRITE_COUNT 64
 #define SPRITE_WIDTH 16
 #define SPRITE_OFFSET 16
 
-#define TILE_DATA_SIZE (TILE_COUNT * TILE_SIZE)
+#define TILE_DATA_SIZE (TILE_COUNT * TILE_WIDTH)
 #define BG_DATA_SIZE ((WORLD_WIDTH / TILE_WIDTH) * (WORLD_HEIGHT / TILE_WIDTH))
 #define WINDOW_DATA_SIZE ((DISPLAY_WIDTH / TILE_WIDTH) * (DISPLAY_HEIGHT / TILE_WIDTH))
 
@@ -87,11 +86,11 @@ private:
     // Graphics registers
     bool render{};
     int16_t horizontalScroll{};
-    int8_t verticalScroll{};
+    int16_t verticalScroll{};
     uint16_t windowX{};
-    uint8_t windowY{};
+    uint16_t windowY{};
     Color palette[PALETTE_SIZE]{};
-    uint8_t tileData[TILE_COUNT][TILE_SIZE]{};
+    uint32_t tileData[TILE_COUNT][8]{};
     uint8_t backgroundData[BG_DATA_SIZE]{};
     uint8_t windowData[WINDOW_DATA_SIZE]{};
     Sprite sprites[SPRITE_COUNT]{};
