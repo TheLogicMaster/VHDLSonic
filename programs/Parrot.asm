@@ -10,7 +10,7 @@
     bra -8
 
     include "libraries/Sonic.asm"
-    include "libraries/Print.asm"
+    include "libraries/Serial.asm"
 
 message: db "Say something!\n", 0
 

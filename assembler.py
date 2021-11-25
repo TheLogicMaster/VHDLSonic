@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import shlex
 import platform
+import basic
 
 constants = {}
 line_number = 0
@@ -644,7 +645,7 @@ def main():
 
     parser = argparse.ArgumentParser(description='Assemble a program. Assumed to be in the <project>/programs directory by default')
     parser.add_argument('program', help='The program file to assemble')
-    parser.add_argument('-t', '--type', default='assembly', choices=['assembly', 'c'])
+    parser.add_argument('-t', '--type', default='assembly', choices=['assembly', 'c', 'basic'])
     parser.add_argument('-r', '--run', action='store_true', help="Whether to run the emulator after assembly")
     parser.add_argument('-f', '--fpga', default='none', choices=['none', 'patch', 'flash'], type=str.lower, help="Whether to patch or run for FPGA (Linux only)")
     parser.add_argument('-e', '--emulator', help='The path to the emulator if not "../emulator/build/Emulator"')
@@ -668,6 +669,12 @@ def main():
         file = f'{copied[:-2]}.asm'
         cmd = f"\"{args.compiler if args.compiler else os.path.join(os.pardir, 'vbcc/bin/vbccsonic')}\" \"{copied}\""
         subprocess.run(shlex.split(cmd), check=True)
+    elif args.type == 'basic':
+        assembly = os.path.join("./build", os.path.basename(file))
+        open(assembly, 'w').write(basic.compile_basic(open(file).readlines()))
+        shutil.rmtree('./build/libraries', True)
+        shutil.copytree('./libraries', './build/libraries')
+        file = assembly
 
     parse_file()
 
