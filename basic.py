@@ -244,8 +244,9 @@ def evaluate_expression(expression, register):
         elif operation == '/' or operation == 'mod':
             output += '\tpush r0\n'
             output += '\tpush r1\n'
+            output += f'\tpush r{registers - 1}\n'
             output += f'\ttfr r0,r{register}\n'
-            output += f'\ttfr r1,r{registers - 1}\n'
+            output += f'\tpop r1\n'
             output += '\tjsr '
             if operation == '/':
                 output += 'div'
@@ -413,6 +414,11 @@ def output_statement(statement):
         output += f'\tbeq _{label}_end\n\n'
         depth += 1
 
+    elif command == 'exitwhile':
+        if len(while_stack) == 0:
+            error(f'Orphaned EXITWHILE')
+        output += f'\tbra _{while_stack[-1]["label"]}_end\n\n'
+
     elif command == 'for':
         match = re.search(r"(?i)^\s*(\w+)\s*=\s*(.+)\s*to\s*(.+)\s*step\s*(-?\d+)\s*$", remaining)
         if match:
@@ -439,6 +445,11 @@ def output_statement(statement):
         output += f'\tcmp r14,r0\n'
         output += f'\t{"bgt" if step < 0 else "blt"} _{label}_end\n\n'
 
+    elif command == 'exitfor':
+        if len(for_stack) == 0:
+            error(f'Orphaned EXITFOR')
+        output += f'\tbra _{for_stack[-1]["label"]}_end\n\n'
+
     elif command == 'next' or command == 'wend':
         stack = for_stack if command == 'next' else while_stack
         if len(stack) == 0:
@@ -457,6 +468,11 @@ def output_statement(statement):
         depth += 1
         output += f'_{label}:\n\n'
 
+    elif command == 'exitdo':
+        if len(loop_stack) == 0:
+            error(f'Orphaned EXITDO')
+        output += f'\tbra _{loop_stack[-1]["label"]}_end\n\n'
+
     elif command == 'loop':
         match = re.search(r"(?i)^\s*(while|until)\s*(.+)\s*$", remaining)
         if not match:
@@ -464,6 +480,7 @@ def output_statement(statement):
         evaluate_expression(match[2], 14)
         output += '\tcmp r14,0\n'
         output += f'\t{"bne" if match[1] == "while" else "beq"} _{loop_stack[-1]["label"]}\n\n'
+        output += f'_{loop_stack[-1]["label"]}_end:\n'
         depth -= 1
         if depth != loop_stack[-1]['depth']:
             error('Inconsistent loop depth')
@@ -514,9 +531,9 @@ def output_statement(statement):
         output_array_set_command(remaining, 'gpio')
     elif command == 'setgpiomode':
         output_array_set_command(remaining, 'gpio_mode')
-    elif command == 'setardu':
+    elif command == 'setarduino':
         output_array_set_command(remaining, 'arduino')
-    elif command == 'setardumode':
+    elif command == 'setarduinomode':
         output_array_set_command(remaining, 'arduino_mode')
     elif command == 'getled':
         output_array_get_command(remaining, 'leds')
@@ -576,7 +593,14 @@ def compile_basic(lines):
 
     # Program entry point
     output += 'main:\n'
-    output += '\tldr sp,stack\n\n'
+
+    # Setup stack
+    output += '\tldr sp,stack\n'
+
+    # Enable UART
+    output += '\tldr r0,4\n'
+    output += '\tstr r0,r0,{arduino_modes}\n'
+    output += '\tstr r0,[{uart_enable}]\n\n'
 
     # Process program line by line
     for line in lines:

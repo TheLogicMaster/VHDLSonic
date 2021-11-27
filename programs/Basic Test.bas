@@ -69,9 +69,10 @@ print "While: "
 a = 0
 while a < 3
     b = 0
-    while b < 3
+    while b < 4
         print a * 3 + b
         inc b
+        if b == 3 then exitwhile
     wend
     inc a
 wend
@@ -80,7 +81,8 @@ print "\n"
 ' Test FOR loops
 print "For: "
 for i = 2 to 0 step -1
-    for j = 0 to 2
+    for j = 0 to 3
+        if j == 3 then exitfor
         print i * 3 + 2 - j
     next
 next
@@ -94,7 +96,8 @@ do
     do
         print a * 3 + b
         inc b
-    loop while b < 3
+        if b == 3 then exitdo
+    loop while b < 4
     inc a
 loop until a == 3
 print "\n"
@@ -103,6 +106,31 @@ print "\n"
 setled 1, 1
 getled a, 1
 if a == 0 then print "LED off\n" else print "LED on\n"
+
+' Read and print switch 0
+getswitch switch, 0
+print "Switch 0: "
+if switch then print "on\n" else print "off\n"
+
+' Read ADC 0
+getadc adc, 0
+print "ADC 0: "
+print adc
+print "\n"
+
+' Set and read back seven segment display
+setsevenseg 0, 15
+getsevenseg seg, 0
+print "HEX0: "
+print seg
+print "\n"
+
+' Wait for button 0 to be pressed
+print "Press Button 0...\n"
+while !pressed
+    getbtn pressed, 0
+wend
+print "Pressed!\n"
 
 ' End program
 end

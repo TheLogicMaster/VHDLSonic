@@ -229,12 +229,11 @@ def output_load_store_instr(params, size, store=False):
         output_location(params[1])
     elif len(params) == 3:
         rel = parse_register(params[1])
-        offset = parse_constant(params[2])
-        if rel is None or offset is None:
+        if rel is None:  # or offset is None:
             error("Invalid relative load parameters")
         output_byte((0x22 if store else 0x19) + size)
         output_registers(reg, rel)
-        output_word(offset)
+        output_location(params[2])
     else:
         error("Wrong number of parameters")
 

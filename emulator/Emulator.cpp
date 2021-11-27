@@ -448,6 +448,12 @@ uint32_t Emulator::readMicrocontroller(uint32_t address) {
             return sevenSegmentDisplays[address - 10];
         case 16 ... 51: // GPIO
             return gpio[address - 16];
+        case 52 ... 87: // GPIO modes
+            return gpioOutput[address - 52];
+        case 88 ... 103: // Arduino
+            return arduinoIO[address - 88];
+        case 104 ... 119: // Arduino modes
+            return arduinoOutput[address - 104];
         case 120 ... 129: // Switches
             return switches[address - 120];
         case 130 ... 131: // Buttons
@@ -470,6 +476,18 @@ void Emulator::writeMicrocontroller(uint32_t address, uint32_t value) {
             break;
         case 10 ... 15: // Seven segment displays
             sevenSegmentDisplays[address - 10] = value;
+            break;
+        case 16 ... 51: // GPIO
+            gpio[address - 16] = value;
+            break;
+        case 52 ... 87: // GPIO modes
+            gpioOutput[address - 52] = value;
+            break;
+        case 88 ... 103: // Arduino
+            arduinoIO[address - 88] = value;
+            break;
+        case 104 ... 119: // Arduino modes
+            arduinoOutput[address - 104] = value;
             break;
         case 132: // Serial
             if (value == 0)

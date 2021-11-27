@@ -49,7 +49,7 @@ public class AssemblyAnnotator implements Annotator {
 	private static final TokenSet[] RELATIVE_MEMORY_OPERANDS = new TokenSet[]{
 		TokenSet.create(AssemblyTypes.REGISTER),
 		TokenSet.create(AssemblyTypes.REGISTER),
-		TokenSet.create(AssemblyTypes.CONSTANT)
+		TokenSet.create(AssemblyTypes.CONSTANT, AssemblyTypes.LABEL)
 	};
 	private static final TokenSet[] DEFINITION_OPERANDS = new TokenSet[]{
 		TokenSet.create(AssemblyTypes.DEFINITION)
