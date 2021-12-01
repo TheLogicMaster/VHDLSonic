@@ -340,8 +340,35 @@ void Emulator::reset() {
     memset(arduinoOutput, 0, 16);
     std::queue<uint8_t>().swap(uartInBuffer);
 
+    for (auto &timer : timers)
+        timer = {};
+    timerInterruptEnable = 0;
+    timerInterruptFlags = 0;
+
     gpu.reset();
     apu.reset();
+}
+
+void Emulator::updateTimers(int delta) {
+    for (int i = 0; i < 8; i++) {
+        auto &timer = timers[i];
+
+        if (timer.divider == 0 or !timer.enabled)
+            continue;
+
+        timer.ticks += 50 * delta;
+        timer.count += timer.ticks / timer.divider;
+        timer.ticks %= timer.divider;
+        if (timer.count >= timer.compare) {
+            timer.count = 0;
+            timerInterruptFlags |= 1 << i;
+            if (!timer.repeat)
+                timer.enabled = false;
+        }
+    }
+
+    if (timerInterruptEnable & timerInterruptFlags)
+        interruptFlags |= 1 << 4;
 }
 
 uint8_t *Emulator::getDisplayBuffer() {
@@ -398,6 +425,10 @@ bool Emulator::getGpioOutput(int id) {
 
 bool Emulator::getArduinoOutput(int id) {
     return arduinoOutput[id];
+}
+
+Timer &Emulator::getTimer(int id) {
+    return timers[id];
 }
 
 uint8_t *Emulator::getMemory() {
@@ -462,8 +493,22 @@ uint32_t Emulator::readMicrocontroller(uint32_t address) {
             return uartInBuffer.front();
         case 133: // Serial available
             return (uint8_t)uartInBuffer.size();
-        case 136 ... 141:
+        case 136 ... 141: // ADCs
             return analogDigitalConverters[address - 136];
+        case 158: // Timer IE
+            return timerInterruptEnable;
+        case 159: // Timer IF
+            return timerInterruptFlags;
+        case 160 ... 167: // Timer repeat
+            return timers[address - 160].repeat;
+        case 168 ... 175: // Timer count
+            return timers[address - 168].count;
+        case 176 ... 183: // Timer divider
+            return timers[address - 176].divider;
+        case 184 ... 191: // Timer enabled
+            return timers[address - 184].enabled;
+        case 192 ... 199: // Timer compare
+            return timers[address - 192].compare;
         default:
             return 0;
     }
@@ -500,6 +545,27 @@ void Emulator::writeMicrocontroller(uint32_t address, uint32_t value) {
         case 133: // Serial available
             if (!uartInBuffer.empty())
                 uartInBuffer.pop();
+            break;
+        case 158: // Timer IE
+            timerInterruptEnable = value;
+            break;
+        case 159: // Timer IF
+            timerInterruptFlags = value;
+            break;
+        case 160 ... 167: // Timer repeat
+            timers[address - 160].repeat = value;
+            break;
+        case 168 ... 175: // Timer count
+            timers[address - 168].count = value;
+            break;
+        case 176 ... 183: // Timer prescaler
+            timers[address - 176].divider = value;
+            break;
+        case 184 ... 191: // Timer enabled
+            timers[address - 184].enabled = value;
+            break;
+        case 192 ... 199: // Timer compare
+            timers[address - 192].compare = value;
             break;
         default:
             break;

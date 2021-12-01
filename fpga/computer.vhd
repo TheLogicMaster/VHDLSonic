@@ -79,6 +79,7 @@ architecture impl of computer is
 			reset : in std_logic;
 			data_in : in std_logic_vector(31 downto 0);
 			data_out : out std_logic_vector(31 downto 0);
+			timer_int : out std_logic;
 			buttons : in std_logic_vector(1 downto 0);
 			switches : in std_logic_vector(9 downto 0);
 			gpio : inout std_logic_vector(35 downto 0);
@@ -133,6 +134,7 @@ architecture impl of computer is
 	signal interrupts : std_logic_vector(7 downto 0);
 	signal int_vblank : std_logic;
 	signal int_hblank : std_logic;
+	signal int_timer : std_logic;
 	
 	-- Reset system
 	signal reset_int : std_logic; -- Reset interrupt
@@ -151,7 +153,7 @@ begin
 		else microcontroller_data when to_integer(unsigned(address)) >= 16#40000# and to_integer(unsigned(address)) < 16#50000#
 		else x"00000000";
 	
-	interrupts <= 4x"0" & int_hblank & int_vblank & 2x"0";
+	interrupts <= 3x"0" & int_timer & int_hblank & int_vblank & 2x"0";
 	
 	prcoessor : cpu
 		port map (
@@ -184,6 +186,7 @@ begin
 			reset => reset,
 			data_in => data,
 			data_out => microcontroller_data,
+			timer_int => int_timer,
 			buttons => KEY,
 			switches => SW,
 			gpio => GPIO,

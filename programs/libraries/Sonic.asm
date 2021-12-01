@@ -65,3 +65,12 @@
     def adc_3=$4022C
     def adc_4=$40230
     def adc_5=$40234
+    def pwm_enable=$40238
+    def pwm_duty=$40258
+    def timer_ie=$40278
+    def timer_if=$4027C
+    def timer_repeat=$40280
+    def timer_count=$402A0
+    def timer_prescale=$402C0
+    def timer_enable=$402E0
+    def timer_compare=$40300

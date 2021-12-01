@@ -625,6 +625,8 @@ static void runEmulator() {
                 emulator->getAudioSamples().pop();
             }
 
+            emulator->updateTimers(1 << processorSpeeds[processorSpeed]);
+
             if (emulator->run()) {
                 halted = true;
                 break;
