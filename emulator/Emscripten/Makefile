@@ -84,7 +84,7 @@ $(WEB_DIR):
 	mkdir $@
 
 serve: all
-	cp ../../programs/*.bin $(WEB_DIR)
+	cp ../../programs/build/*.bin $(WEB_DIR)
 	python3 -m http.server -d $(WEB_DIR)
 
 $(EXE): $(OBJS) $(WEB_DIR)

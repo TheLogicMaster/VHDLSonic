@@ -129,7 +129,7 @@
 #ifndef IMGUI_IMPL_OPENGL_ES2
 #define IMGUI_IMPL_OPENGL_USE_VERTEX_ARRAY
 #elif defined(__EMSCRIPTEN__)
-#define IMGUI_IMPL_OPENGL_USE_VERTEX_ARRAY
+// #define IMGUI_IMPL_OPENGL_USE_VERTEX_ARRAY
 #define glBindVertexArray       glBindVertexArrayOES
 #define glGenVertexArrays       glGenVertexArraysOES
 #define glDeleteVertexArrays    glDeleteVertexArraysOES
