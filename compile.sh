@@ -18,4 +18,10 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
         echo "Compiling: $f"
         python ../assembler.py "$f" -t c
     done
+
+    for f in ./*.bas
+    do
+        echo "Compiling: $f"
+        python ../assembler.py "$f" -t basic
+    done
 )

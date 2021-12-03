@@ -45,7 +45,11 @@ public:
     bool getGpioOutput(int id);
     bool getArduinoOutput(int id);
     uint8_t& getADC(int id);
-    Timer& getTimer(int index);
+    uint8_t getTimerIE() const;
+    uint8_t getTimerIF() const;
+    Timer& getTimer(int id);
+    uint8_t getPWMDuty(int id);
+    bool getPWMEnabled(int id);
 
     uint8_t* getMemory();
     uint8_t* getRAM();
@@ -76,6 +80,8 @@ private:
     Timer timers[8]{};
     uint8_t timerInterruptEnable = 0;
     uint8_t timerInterruptFlags = 0;
+    uint8_t pwmDuty[8]{};
+    bool pwmEnabled[8]{};
 
     uint8_t memory[0x20000]{};
     uint8_t *rom;

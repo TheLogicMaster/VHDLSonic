@@ -345,6 +345,9 @@ void Emulator::reset() {
     timerInterruptEnable = 0;
     timerInterruptFlags = 0;
 
+    memset(pwmEnabled, 0, 8);
+    memset(pwmDuty, 0, 8);
+
     gpu.reset();
     apu.reset();
 }
@@ -427,6 +430,22 @@ bool Emulator::getArduinoOutput(int id) {
     return arduinoOutput[id];
 }
 
+uint8_t Emulator::getTimerIE() const {
+    return timerInterruptEnable;
+}
+
+uint8_t Emulator::getTimerIF() const {
+    return timerInterruptFlags;
+}
+
+uint8_t Emulator::getPWMDuty(int id) {
+    return pwmDuty[id];
+}
+
+bool Emulator::getPWMEnabled(int id) {
+    return pwmEnabled[id];
+}
+
 Timer &Emulator::getTimer(int id) {
     return timers[id];
 }
@@ -490,11 +509,17 @@ uint32_t Emulator::readMicrocontroller(uint32_t address) {
         case 130 ... 131: // Buttons
             return buttons[address - 130];
         case 132: // Serial
+            if (uartInBuffer.empty())
+                return 0;
             return uartInBuffer.front();
         case 133: // Serial available
             return (uint8_t)uartInBuffer.size();
         case 136 ... 141: // ADCs
             return analogDigitalConverters[address - 136];
+        case 142 ... 149: // PWM Enable
+            return pwmEnabled[address - 142];
+        case 150 ... 157: // PWM Duty
+            return pwmDuty[address - 150];
         case 158: // Timer IE
             return timerInterruptEnable;
         case 159: // Timer IF
@@ -545,6 +570,12 @@ void Emulator::writeMicrocontroller(uint32_t address, uint32_t value) {
         case 133: // Serial available
             if (!uartInBuffer.empty())
                 uartInBuffer.pop();
+            break;
+        case 142 ... 149: // PWM Enable
+            pwmEnabled[address - 142] = value;
+            break;
+        case 150 ... 157: // PWM Duty
+            pwmDuty[address - 150] = value;
             break;
         case 158: // Timer IE
             timerInterruptEnable = value;
