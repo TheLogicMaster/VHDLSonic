@@ -4,6 +4,8 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
 
+"${SCRIPT_DIR}/fetch_songs.sh"
+
 (
     cd "${SCRIPT_DIR}/programs" || exit -1
 

@@ -382,7 +382,7 @@ def parse_file():
             match = re.search(r"^\"(.+)\"$", params[0])
             if not match:
                 error("Invalid include file")
-            file_path = os.path.join(os.path.dirname(file), match[1])
+            file_path = os.path.abspath(os.path.join(os.path.dirname(file), match[1]))
             if file_path in includes:
                 continue
             includes.append(file_path)
@@ -669,7 +669,7 @@ def main():
         cmd = f"\"{args.compiler if args.compiler else os.path.join(os.pardir, 'vbcc/bin/vbccsonic')}\" \"{copied}\""
         subprocess.run(shlex.split(cmd), check=True)
     elif args.type == 'basic':
-        assembly = os.path.join("./build", os.path.basename(file))
+        assembly = os.path.splitext(os.path.join("./build", os.path.basename(file)))[0] + '.asm'
         open(assembly, 'w').write(basic.compile_basic(open(file).readlines()))
         shutil.rmtree('./build/libraries', True)
         shutil.copytree('./libraries', './build/libraries')

@@ -3,6 +3,7 @@
 .gradle/
 emulator/cmake/
 emulator/cmake-build-debug/
+__pycache__/
 /vbcc/bin
 /vbcc/machines/*/dt.*
 /vbcc/machines/*/*.o
