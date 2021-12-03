@@ -6787,10 +6787,6 @@ var ASM_CONSTS = {
       GLctx.bindTexture(target, GL.textures[texture]);
     }
 
-  function _glBindVertexArrayOES(vao) {
-      GLctx['bindVertexArray'](GL.vaos[vao]);
-    }
-
   function _glBlendEquation(x0) { GLctx['blendEquation'](x0) }
 
   function _glBlendEquationSeparate(x0, x1) { GLctx['blendEquationSeparate'](x0, x1) }
@@ -6842,14 +6838,6 @@ var ASM_CONSTS = {
       GL.shaders[id] = null;
     }
 
-  function _glDeleteVertexArraysOES(n, vaos) {
-      for (var i = 0; i < n; i++) {
-        var id = HEAP32[(((vaos)+(i*4))>>2)];
-        GLctx['deleteVertexArray'](GL.vaos[id]);
-        GL.vaos[id] = null;
-      }
-    }
-
   function _glDetachShader(program, shader) {
       GLctx.detachShader(GL.programs[program], GL.shaders[shader]);
     }
@@ -6875,11 +6863,6 @@ var ASM_CONSTS = {
 
   function _glGenTextures(n, textures) {
       __glGenObject(n, textures, 'createTexture', GL.textures
-        );
-    }
-
-  function _glGenVertexArraysOES(n, arrays) {
-      __glGenObject(n, arrays, 'createVertexArray', GL.vaos
         );
     }
 
@@ -7772,7 +7755,6 @@ var asmLibraryArg = {
   "glAttachShader": _glAttachShader,
   "glBindBuffer": _glBindBuffer,
   "glBindTexture": _glBindTexture,
-  "glBindVertexArrayOES": _glBindVertexArrayOES,
   "glBlendEquation": _glBlendEquation,
   "glBlendEquationSeparate": _glBlendEquationSeparate,
   "glBlendFuncSeparate": _glBlendFuncSeparate,
@@ -7783,7 +7765,6 @@ var asmLibraryArg = {
   "glCreateProgram": _glCreateProgram,
   "glCreateShader": _glCreateShader,
   "glDeleteShader": _glDeleteShader,
-  "glDeleteVertexArraysOES": _glDeleteVertexArraysOES,
   "glDetachShader": _glDetachShader,
   "glDisable": _glDisable,
   "glDrawElements": _glDrawElements,
@@ -7791,7 +7772,6 @@ var asmLibraryArg = {
   "glEnableVertexAttribArray": _glEnableVertexAttribArray,
   "glGenBuffers": _glGenBuffers,
   "glGenTextures": _glGenTextures,
-  "glGenVertexArraysOES": _glGenVertexArraysOES,
   "glGetAttribLocation": _glGetAttribLocation,
   "glGetIntegerv": _glGetIntegerv,
   "glGetProgramInfoLog": _glGetProgramInfoLog,
