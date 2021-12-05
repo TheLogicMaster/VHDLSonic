@@ -1,0 +1,10 @@
+emulator/Windows/** linguist-vendored
+emulator/imgui/** linguist-vendored
+emulator/imgui_* linguist-vendored
+emulator/ImGui* linguist-vendored
+
+vbcc/** linguist-vendored
+vbcc/machines/sonic/machine.* linguist-vendored=false
+
+fpga/** linguist-vendored
+fpga/*.vhd linguist-vendored=false
