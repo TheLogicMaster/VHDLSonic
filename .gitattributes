@@ -8,3 +8,5 @@ vbcc/machines/sonic/machine.* linguist-vendored=false
 
 fpga/** linguist-vendored
 fpga/*.vhd linguist-vendored=false
+
+*.sh text eol=lf
