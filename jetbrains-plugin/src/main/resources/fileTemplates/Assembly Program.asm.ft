@@ -12,7 +12,11 @@
     include "libraries/Sonic.asm"
 
 main:
+    ldr sp,stack ; Initialize stack
 
 loop:
 
     bra loop
+
+    data
+stack: ; Don't put anything after this line

@@ -58,6 +58,8 @@
 *sopc_*
 # *.sdc # I want those timing files
 
+*.cdf
+
 # ignore Quartus II generated folders
 */db/
 */incremental_db/
@@ -69,3 +71,10 @@ incremental_db/
 db/
 _output_files/
 PLLJ_PLLSPE_INFO.txt
+
+uart/
+uart.sopcinfo
+greybox_tmp/
+.qsys_edit/
+adc/
+adc.sopcinfo

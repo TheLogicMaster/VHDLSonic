@@ -53,7 +53,7 @@ void Disassembler::disassemble(uint32_t address, int depth, bool jumpTable) {
             disassemble(end + 1 + *(int32_t*)&instruction.immediate, depth + 1);
         else if (instruction.opcode == 0x48) // JSR
             disassemble(instruction.immediate, depth + 1);
-        else if (instruction.opcode == 0x49 || instruction.opcode == 0x4B || instruction.opcode == 0x00) // RET, RTI, HALT
+        else if (instruction.opcode == 0x49 || instruction.opcode == 0x4B || instruction.opcode == 0x4C) // RET, RTI, HALT
             return;
         address = end + 1;
     }

@@ -6,7 +6,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
 
 PROJECT="${SCRIPT_DIR}"
 
-if grep -q Microsoft /proc/version; then
+if grep -i -q Microsoft /proc/version; then
   # WSL variables
   QUARTUS_DIR_EXT='C:\intelFPGA_lite\20.1\quartus\bin64'
 

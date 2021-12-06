@@ -9,13 +9,14 @@ import shutil
 import subprocess
 import shlex
 import platform
+import basic
 
 constants = {}
 line_number = 0
 file = ""
 output = bytearray()
 address = 0
-data_address = 0x10000
+data_address = 0x18000
 includes = []
 labels = {}
 last_label = None
@@ -228,12 +229,11 @@ def output_load_store_instr(params, size, store=False):
         output_location(params[1])
     elif len(params) == 3:
         rel = parse_register(params[1])
-        offset = parse_constant(params[2])
-        if rel is None or offset is None:
+        if rel is None:  # or offset is None:
             error("Invalid relative load parameters")
         output_byte((0x22 if store else 0x19) + size)
         output_registers(reg, rel)
-        output_word(offset)
+        output_location(params[2])
     else:
         error("Wrong number of parameters")
 
@@ -382,7 +382,7 @@ def parse_file():
             match = re.search(r"^\"(.+)\"$", params[0])
             if not match:
                 error("Invalid include file")
-            file_path = os.path.join(os.path.dirname(file), match[1])
+            file_path = os.path.abspath(os.path.join(os.path.dirname(file), match[1]))
             if file_path in includes:
                 continue
             includes.append(file_path)
@@ -644,7 +644,7 @@ def main():
 
     parser = argparse.ArgumentParser(description='Assemble a program. Assumed to be in the <project>/programs directory by default')
     parser.add_argument('program', help='The program file to assemble')
-    parser.add_argument('-t', '--type', default='assembly', choices=['assembly', 'c'])
+    parser.add_argument('-t', '--type', default='assembly', choices=['assembly', 'c', 'basic'])
     parser.add_argument('-r', '--run', action='store_true', help="Whether to run the emulator after assembly")
     parser.add_argument('-f', '--fpga', default='none', choices=['none', 'patch', 'flash'], type=str.lower, help="Whether to patch or run for FPGA (Linux only)")
     parser.add_argument('-e', '--emulator', help='The path to the emulator if not "../emulator/build/Emulator"')
@@ -668,6 +668,12 @@ def main():
         file = f'{copied[:-2]}.asm'
         cmd = f"\"{args.compiler if args.compiler else os.path.join(os.pardir, 'vbcc/bin/vbccsonic')}\" \"{copied}\""
         subprocess.run(shlex.split(cmd), check=True)
+    elif args.type == 'basic':
+        assembly = os.path.splitext(os.path.join("./build", os.path.basename(file)))[0] + '.asm'
+        open(assembly, 'w').write(basic.compile_basic(open(file).readlines()))
+        shutil.rmtree('./build/libraries', True)
+        shutil.copytree('./libraries', './build/libraries')
+        file = assembly
 
     parse_file()
 
@@ -678,10 +684,10 @@ def main():
             error("No such label: " + label, -1)
         offset = 0
         if memory:
-            if labels[label] < 0x10000:
-                offset = 0x10000
-            else:
+            if labels[label] < 0x18000:
                 offset = 0x18000
+            else:
+                offset = 0x1E000
         write_word_in_output(addr, labels[label] + offset)
 
     # Substitute labels for relative jumps
@@ -693,12 +699,13 @@ def main():
         write_word_in_output(addr, offset & 0xFFFFFFFF)
 
     # Ensure ROM size
+    # Todo: Verify allocated RAM size
     if memory:
-        ensure_output_size(0x8000)
-        if address > 0x8000:
+        ensure_output_size(0x6000)
+        if address > 0x6000:
             error("In-memory program size exceeded", -1)
     else:
-        if address > 0x10000:
+        if address > 0x18000:
             error("Program size exceeded", -1)
 
     # Save machine code results

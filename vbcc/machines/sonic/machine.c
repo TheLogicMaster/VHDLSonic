@@ -101,10 +101,12 @@ static struct Typ ityp = {INT};
 static char memory_suffixes[5] = {'?', 'b', 'w', '?', 'r'};
 
 // IO port definitions
-#define PORT_COUNT 22
+#define PORT_COUNT 35
 static char *port_names[PORT_COUNT] = {
     "IE", "IF", "Random", 
-    "LEDs", "Seven_Segment", "GPIO", "GPIO_Modes", "Arduino", "Arduino_Modes", "Switches", "Buttons", "Serial",
+    "LEDs", "Seven_Segment", "GPIO", "GPIO_Modes", "Arduino", "Arduino_Modes", "Switches", "Buttons", "Serial", "Serial_Available", 
+    "Serial_Full", "UART_Enable", "ADC", "PWM_Enable", "PWM_Duty", "Timer_IE", "Timer_IF", "Timer_Repeat", "Timer_Count", "Timer_Prescale",
+    "Timer_Enable", "Timer_Compare",
     "Render", "H_Scroll", "V_Scroll", "Window_X", "Window_Y", "Palette", "Tile_Data", "BG_Data", "Win_Data", "Sprites"
 };
 
@@ -817,7 +819,8 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                 if (reg2 != 1)
                     emit(f, "\ttfr r1,r%i\n", reg2);
                 emit(f, "\tjsr %s%s\n", q1typ(ic) & UNSIGNED ? "u" : "", code == DIV ? "div" : "mod");
-                store_reg(f, sizetab[ztyp(ic) & NQ], 0, ic->z);
+                emit(f, "\ttfr r1,r0\n");
+                store_reg(f, sizetab[ztyp(ic) & NQ], 1, ic->z);
                 emit(f, "\n");
                 break;
             }
@@ -1008,12 +1011,20 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                     emit_inline_asm(f, ic->q1.v->fi->inline_asm);
                     emit(f, "\n");
                 } else {
-                    emit(f, "; Call Function \"%s\"\n", ic->q1.v->identifier);
+                    emit_ic_comment(f, ic);
                     if (!hasPushed)
                         emit(f, "\tadd sp,%i\n", 4 - stackframe % 4);
                     pushed = 0;
                     hasPushed = 0;
-                    emit(f, "\tjsr _%s\n", ic->q1.v->identifier);
+                    if (ic->q1.flags & DREFOBJ) {
+                        ic->q1.flags &= ~DREFOBJ; // Hack to support function pointers
+                        int newLabel = ++label;
+                        emit(f, "\tldr r0,label%d\n", newLabel);
+                        emit(f, "\tpush r0\n");
+                        emit(f, "\tjmp r%d\n", get_param_reg(f, 4, 0, ic->q1));
+                        emit(f, "label%d:\n", newLabel);
+                    } else
+                        emit(f, "\tjsr _%s\n", ic->q1.v->identifier);
                     emit(f, "\tsub sp,%i\n", pushedargsize(ic) + 4 - stackframe % 4);
                 }
                 break;

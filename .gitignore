@@ -3,6 +3,7 @@
 .gradle/
 emulator/cmake/
 emulator/cmake-build-debug/
+__pycache__/
 /vbcc/bin
 /vbcc/machines/*/dt.*
 /vbcc/machines/*/*.o
@@ -11,3 +12,7 @@ emulator/cmake-build-debug/
 !/fpga/simulation/vhdlsonic.mpf
 /emulator/Emscripten/web/
 /emulator/Emscripten/*.o
+
+/programs/data/songs/*
+!/programs/data/songs/spongebob.bin
+!/programs/data/songs/dragonballsuper.bin

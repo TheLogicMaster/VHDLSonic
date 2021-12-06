@@ -79,6 +79,7 @@ architecture impl of computer is
 			reset : in std_logic;
 			data_in : in std_logic_vector(31 downto 0);
 			data_out : out std_logic_vector(31 downto 0);
+			timer_int : out std_logic;
 			buttons : in std_logic_vector(1 downto 0);
 			switches : in std_logic_vector(9 downto 0);
 			gpio : inout std_logic_vector(35 downto 0);
@@ -93,6 +94,24 @@ architecture impl of computer is
 		);
 	end component;
 	
+	component gpu is
+		port (
+			address : in std_logic_vector(31 downto 0);
+			write_en : in std_logic;
+			clock : in std_logic;
+			reset : in std_logic;
+			data_in : in std_logic_vector(31 downto 0);
+			data_out : out std_logic_vector(31 downto 0);
+			vga_r : out std_logic_vector(3 downto 0);
+			vga_g : out std_logic_vector(3 downto 0);
+			vga_b : out std_logic_vector(3 downto 0);
+			vga_hs : out std_logic;
+			vga_vs : out std_logic;
+			vblank : out std_logic;
+			hblank : out std_logic
+		);
+	end component;						
+	
 	component power_on_reset is
 		port (
 			clock : in std_logic;
@@ -106,12 +125,16 @@ architecture impl of computer is
 	signal data : std_logic_vector(31 downto 0);
 	signal memory_data : std_logic_vector(31 downto 0);
 	signal microcontroller_data : std_logic_vector(31 downto 0);
+	signal gpu_data : std_logic_vector(31 downto 0);
 	signal address : std_logic_vector(31 downto 0); -- Address line
 	signal data_mask : std_logic_vector(3 downto 0); -- Data line mask
 	signal write_en : std_logic; -- Write enable line
 	
 	-- Interrupt bus
 	signal interrupts : std_logic_vector(7 downto 0);
+	signal int_vblank : std_logic;
+	signal int_hblank : std_logic;
+	signal int_timer : std_logic;
 	
 	-- Reset system
 	signal reset_int : std_logic; -- Reset interrupt
@@ -126,10 +149,11 @@ begin
 	
 	cpu_in <= 
 		memory_data when to_integer(unsigned(address)) < 16#20000#
+		else gpu_data when to_integer(unsigned(address)) >= 16#30000# and to_integer(unsigned(address)) < 16#40000#
 		else microcontroller_data when to_integer(unsigned(address)) >= 16#40000# and to_integer(unsigned(address)) < 16#50000#
 		else x"00000000";
 	
-	interrupts <= x"00";
+	interrupts <= 3x"0" & int_timer & int_hblank & int_vblank & 2x"0";
 	
 	prcoessor : cpu
 		port map (
@@ -162,6 +186,7 @@ begin
 			reset => reset,
 			data_in => data,
 			data_out => microcontroller_data,
+			timer_int => int_timer,
 			buttons => KEY,
 			switches => SW,
 			gpio => GPIO,
@@ -173,6 +198,23 @@ begin
 			hex3 => HEX3,
 			hex4 => HEX4,
 			hex5 => HEX5
+		);
+	
+	ppu : gpu
+		port map (
+			address => address,
+			write_en => write_en,
+			clock => clock,
+			reset => reset,
+			data_in => data,
+			data_out => gpu_data,
+			vga_r => VGA_R,
+			vga_g => VGA_G,
+			vga_b => VGA_B,
+			vga_hs => VGA_HS,
+			vga_vs => VGA_VS,
+			vblank => int_vblank,
+			hblank => int_hblank
 		);
 
 	por : power_on_reset

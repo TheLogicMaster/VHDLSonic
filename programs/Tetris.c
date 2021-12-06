@@ -334,8 +334,12 @@ int main() {
 
     // Load color variations
     for (int i = 0; i < 7; i++)
-        for (int j = 0; j < 32; j++)
-            Tile_Data[j + 32 * (5 + i * 4)] = Tile_Data[j + 32] & ((i + 1) << 1 | (i + 1) << 5 | 0x11);
+        for (int j = 0; j < 8; j++) {
+            int data = 0x11111111;
+            for (int k = 0; k < 8; k++)
+                data |= (i + 1) << (1 + 4 * k);
+            Tile_Data[j + 8 * (5 + i * 4)] = Tile_Data[j + 8] & data;
+        }
 
     // Game loop
     while (1) {

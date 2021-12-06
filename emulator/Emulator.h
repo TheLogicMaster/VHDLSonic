@@ -14,12 +14,22 @@
 #define FLAG_N 1 << 1
 #define FLAG_V 1 << 0
 
+struct Timer {
+    bool enabled;
+    bool repeat;
+    uint16_t divider = 1;
+    uint64_t count;
+    uint32_t compare;
+    uint32_t ticks;
+};
+
 class Emulator {
 public:
     Emulator();
     void load(uint8_t *romData, long size);
     int run();
     void reset();
+    void updateTimers(int delta);
 
     uint8_t *getDisplayBuffer();
     std::queue<uint8_t> &getAudioSamples();
@@ -35,6 +45,11 @@ public:
     bool getGpioOutput(int id);
     bool getArduinoOutput(int id);
     uint8_t& getADC(int id);
+    uint8_t getTimerIE() const;
+    uint8_t getTimerIF() const;
+    Timer& getTimer(int id);
+    uint8_t getPWMDuty(int id);
+    bool getPWMEnabled(int id);
 
     uint8_t* getMemory();
     uint8_t* getRAM();
@@ -62,6 +77,11 @@ private:
     uint8_t analogDigitalConverters[6]{};
     std::queue<uint8_t> uartInBuffer{};
     std::string printBuffer{};
+    Timer timers[8]{};
+    uint8_t timerInterruptEnable = 0;
+    uint8_t timerInterruptFlags = 0;
+    uint8_t pwmDuty[8]{};
+    bool pwmEnabled[8]{};
 
     uint8_t memory[0x20000]{};
     uint8_t *rom;

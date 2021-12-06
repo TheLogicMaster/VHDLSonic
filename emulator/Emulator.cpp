@@ -10,12 +10,12 @@
 Emulator::Emulator() {
     srand(time(nullptr));
     rom = memory;
-    ram = memory + 0x10000;
+    ram = memory + 0x18000;
 }
 
 void Emulator::load(uint8_t *romData, long size) {
-    memset(rom, 0, 0x10000);
-    memcpy(rom, romData, size);
+    memset(rom, 0, 0x18000);
+    memcpy(rom, romData, std::min(size, 0x18000l));
 }
 
 int Emulator::run() {
@@ -326,7 +326,7 @@ void Emulator::reset() {
     status = 0;
     interruptEnable = 0;
     interruptFlags = 0;
-    memset(ram, 0, 0x10000);
+    memset(ram, 0, 0x8000);
     memset(lights, 0, 10);
     memset(sevenSegmentDisplays, 0, 6);
     memset(registers, 0, 16 * 4);
@@ -340,8 +340,38 @@ void Emulator::reset() {
     memset(arduinoOutput, 0, 16);
     std::queue<uint8_t>().swap(uartInBuffer);
 
+    for (auto &timer : timers)
+        timer = {};
+    timerInterruptEnable = 0;
+    timerInterruptFlags = 0;
+
+    memset(pwmEnabled, 0, 8);
+    memset(pwmDuty, 0, 8);
+
     gpu.reset();
     apu.reset();
+}
+
+void Emulator::updateTimers(int delta) {
+    for (int i = 0; i < 8; i++) {
+        auto &timer = timers[i];
+
+        if (timer.divider == 0 or !timer.enabled)
+            continue;
+
+        timer.ticks += 50 * delta;
+        timer.count += timer.ticks / timer.divider;
+        timer.ticks %= timer.divider;
+        if (timer.count >= timer.compare) {
+            timer.count = 0;
+            timerInterruptFlags |= 1 << i;
+            if (!timer.repeat)
+                timer.enabled = false;
+        }
+    }
+
+    if (timerInterruptEnable & timerInterruptFlags)
+        interruptFlags |= 1 << 4;
 }
 
 uint8_t *Emulator::getDisplayBuffer() {
@@ -400,6 +430,26 @@ bool Emulator::getArduinoOutput(int id) {
     return arduinoOutput[id];
 }
 
+uint8_t Emulator::getTimerIE() const {
+    return timerInterruptEnable;
+}
+
+uint8_t Emulator::getTimerIF() const {
+    return timerInterruptFlags;
+}
+
+uint8_t Emulator::getPWMDuty(int id) {
+    return pwmDuty[id];
+}
+
+bool Emulator::getPWMEnabled(int id) {
+    return pwmEnabled[id];
+}
+
+Timer &Emulator::getTimer(int id) {
+    return timers[id];
+}
+
 uint8_t *Emulator::getMemory() {
     return memory;
 }
@@ -442,14 +492,48 @@ uint8_t Emulator::getStatus() const {
 
 uint32_t Emulator::readMicrocontroller(uint32_t address) {
     switch (address) {
+        case 0 ... 9: // LEDs
+            return lights[address];
         case 10 ... 15: // Seven segment displays
             return sevenSegmentDisplays[address - 10];
         case 16 ... 51: // GPIO
             return gpio[address - 16];
+        case 52 ... 87: // GPIO modes
+            return gpioOutput[address - 52];
+        case 88 ... 103: // Arduino
+            return arduinoIO[address - 88];
+        case 104 ... 119: // Arduino modes
+            return arduinoOutput[address - 104];
         case 120 ... 129: // Switches
             return switches[address - 120];
         case 130 ... 131: // Buttons
             return buttons[address - 130];
+        case 132: // Serial
+            if (uartInBuffer.empty())
+                return 0;
+            return uartInBuffer.front();
+        case 133: // Serial available
+            return (uint8_t)uartInBuffer.size();
+        case 136 ... 141: // ADCs
+            return analogDigitalConverters[address - 136];
+        case 142 ... 149: // PWM Enable
+            return pwmEnabled[address - 142];
+        case 150 ... 157: // PWM Duty
+            return pwmDuty[address - 150];
+        case 158: // Timer IE
+            return timerInterruptEnable;
+        case 159: // Timer IF
+            return timerInterruptFlags;
+        case 160 ... 167: // Timer repeat
+            return timers[address - 160].repeat;
+        case 168 ... 175: // Timer count
+            return timers[address - 168].count;
+        case 176 ... 183: // Timer divider
+            return timers[address - 176].divider;
+        case 184 ... 191: // Timer enabled
+            return timers[address - 184].enabled;
+        case 192 ... 199: // Timer compare
+            return timers[address - 192].compare;
         default:
             return 0;
     }
@@ -463,6 +547,18 @@ void Emulator::writeMicrocontroller(uint32_t address, uint32_t value) {
         case 10 ... 15: // Seven segment displays
             sevenSegmentDisplays[address - 10] = value;
             break;
+        case 16 ... 51: // GPIO
+            gpio[address - 16] = value;
+            break;
+        case 52 ... 87: // GPIO modes
+            gpioOutput[address - 52] = value;
+            break;
+        case 88 ... 103: // Arduino
+            arduinoIO[address - 88] = value;
+            break;
+        case 104 ... 119: // Arduino modes
+            arduinoOutput[address - 104] = value;
+            break;
         case 132: // Serial
             if (value == 0)
                 break;
@@ -471,6 +567,37 @@ void Emulator::writeMicrocontroller(uint32_t address, uint32_t value) {
             if (printBuffer.length() > PRINT_BUFFER)
                 printBuffer.erase(0, 1);
             break;
+        case 133: // Serial available
+            if (!uartInBuffer.empty())
+                uartInBuffer.pop();
+            break;
+        case 142 ... 149: // PWM Enable
+            pwmEnabled[address - 142] = value;
+            break;
+        case 150 ... 157: // PWM Duty
+            pwmDuty[address - 150] = value;
+            break;
+        case 158: // Timer IE
+            timerInterruptEnable = value;
+            break;
+        case 159: // Timer IF
+            timerInterruptFlags = value;
+            break;
+        case 160 ... 167: // Timer repeat
+            timers[address - 160].repeat = value;
+            break;
+        case 168 ... 175: // Timer count
+            timers[address - 168].count = value;
+            break;
+        case 176 ... 183: // Timer prescaler
+            timers[address - 176].divider = value;
+            break;
+        case 184 ... 191: // Timer enabled
+            timers[address - 184].enabled = value;
+            break;
+        case 192 ... 199: // Timer compare
+            timers[address - 192].compare = value;
+            break;
         default:
             break;
     }
@@ -478,15 +605,15 @@ void Emulator::writeMicrocontroller(uint32_t address, uint32_t value) {
 
 uint32_t Emulator::readUint32(uint32_t address) {
     switch (address) {
-        case 0x00000 ... 0x0FFFF - 3:
+        case 0x00000 ... 0x17FFF - 3:
             return reverseWordBytes(*(uint32_t*)&rom[address & ~0x3]);
-        case 0x10000 ... 0x1FFFF - 3:
-            return reverseWordBytes(*(uint32_t*)&ram[address & ~0x3 - 0x10000]);
+        case 0x18000 ... 0x1FFFF - 3:
+            return reverseWordBytes(*(uint32_t*)&ram[address & ~0x3 - 0x18000]);
         case 0x20000:
             return interruptEnable;
-        case 0x20001:
+        case 0x20004:
             return interruptFlags;
-        case 0x20002:
+        case 0x20008:
             return rand();
         case 0x30000 ... 0x3FFFF:
             return gpu.read((address - 0x30000) / 4);
@@ -499,14 +626,17 @@ uint32_t Emulator::readUint32(uint32_t address) {
 
 void Emulator::writeUint32(uint32_t address, uint32_t value) {
     switch (address) {
-        case 0x10000 ... 0x1FFFF - 3:
-            *(uint32_t*)&ram[address & ~0x3 - 0x10000] = reverseWordBytes(value);
+        case 0x18000 ... 0x1FFFF - 3:
+            *(uint32_t*)&ram[address & ~0x3 - 0x18000] = reverseWordBytes(value);
             break;
         case 0x20000:
             interruptEnable = value;
             break;
-        case 0x20001:
+        case 0x20004:
             interruptFlags = value;
+            break;
+        case 0x20008:
+            srand(value);
             break;
         case 0x30000 ... 0x3FFFF:
             gpu.write((address - 0x30000) / 4, value);

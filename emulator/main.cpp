@@ -22,6 +22,7 @@
 #include "Emulator.h"
 
 // Macros from: https://github.com/drhelius/Gearboy/blob/master/platforms/desktop-shared/gui_debug.h
+#define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
 #define BYTE_TO_BINARY(byte)  \
   (byte & 0x80 ? '1' : '0'), \
   (byte & 0x40 ? '1' : '0'), \
@@ -40,14 +41,16 @@ static GLuint displayTexture;
 static bool exited = false;
 
 static bool showDisplay = true;
-static int displayScale = 1;
-static bool showProcessor = false;
+static int displayScale = 3;
+static bool showProcessor = true;
 static bool showPrintLog = true;
 static bool showIO = true;
 static bool showGPIO = true;
-static bool showDisassembly = false;
-static bool showBreakpoints = false;
-static bool controllerPeripheral = false;
+static bool showDisassembly = true;
+static bool showBreakpoints = true;
+static bool showTimers = true;
+static bool showPWM = true;
+static bool controllerPeripheral = true;
 static int processorSpeeds[8]{0, 1, 2, 3, 4, 5, 9, 14};
 static int processorSpeed = 0;
 
@@ -110,6 +113,10 @@ static void setupPersistenceHandler(ImGuiContext *context) {
             showDisassembly = value;
         else if (sscanf(line, "ShowBreakpoints=%d%n", &value, &n) == 1)
             showBreakpoints = value;
+        else if (sscanf(line, "ShowTimers=%d%n", &value, &n) == 1)
+            showTimers = value;
+        else if (sscanf(line, "ShowPWM=%d%n", &value, &n) == 1)
+            showPWM = value;
         else if (sscanf(line, "WindowSize=%d,%d%n", &value, &value2, &n) == 2)
             SDL_SetWindowSize(window, value, value2);
         else if (sscanf(line, "Controller=%d%n", &value, &n) == 1)
@@ -129,6 +136,8 @@ static void setupPersistenceHandler(ImGuiContext *context) {
         buf->appendf("ShowGPIO=%d\n", showGPIO);
         buf->appendf("ShowDisassembly=%d\n", showDisassembly);
         buf->appendf("ShowBreakpoints=%d\n", showBreakpoints);
+        buf->appendf("ShowTimers=%d\n", showTimers);
+        buf->appendf("ShowPWM=%d\n", showPWM);
         int w, h;
         SDL_GetWindowSize(window, &w, &h);
         buf->appendf("WindowSize=%d,%d\n", w, h);
@@ -185,7 +194,7 @@ static void displayMainMenuBar() {
             if (ImGui::MenuItem("Exit"))
                 exited = true;
 #else
-            static const char *roms[] {"C Snake", "Tetris", "Hello World", "Demo"};
+            static const char *roms[] {"C Snake", "Tetris", "Hello World", "Demo", "Dice", "Parrot", "Blink", "Number Game"};
             for (auto &memory: roms)
                 if (ImGui::MenuItem(memory))
                     loadRom(memory + std::string(".bin"));
@@ -219,6 +228,8 @@ static void displayMainMenuBar() {
             ImGui::MenuItem("Show Processor", nullptr, &showProcessor);
             ImGui::MenuItem("Show Disassembly", nullptr, &showDisassembly);
             ImGui::MenuItem("Show Breakpoints", nullptr, &showBreakpoints);
+            ImGui::MenuItem("Show Timers", nullptr, &showTimers);
+            ImGui::MenuItem("Show PWM", nullptr, &showPWM);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -245,7 +256,7 @@ static void displayScreen() {
     if (!showDisplay)
         return;
 
-    ImGui::SetNextWindowPos(ImVec2(5, 25), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(5, 26), ImGuiCond_FirstUseEver);
     ImGui::Begin("Display", &showDisplay, ImGuiWindowFlags_AlwaysAutoResize);
 
     // Right click context menu
@@ -279,12 +290,12 @@ static void displayMemoryViewers() {
     if (romViewer->Open) {
         ImGui::SetNextWindowSize(ImVec2(0, 218), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(506, 25), ImGuiCond_FirstUseEver);
-        romViewer->DrawWindow("ROM Viewer", emulator->getROM(), 0x10000);
+        romViewer->DrawWindow("ROM Viewer", emulator->getROM(), 0x18000);
     }
     if (ramEditor->Open) {
         ImGui::SetNextWindowSize(ImVec2(0, 218), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(506, 248), ImGuiCond_FirstUseEver);
-        ramEditor->DrawWindow("RAM Editor", emulator->getRAM(), 0x10000, 0x10000);
+        ramEditor->DrawWindow("RAM Editor", emulator->getRAM(), 0x8000, 0x18000);
     }
 }
 
@@ -451,8 +462,8 @@ static void displayProcessor() {
     if (!showProcessor)
         return;
 
-    ImGui::SetNextWindowPos(ImVec2(1063, 25), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(159, 218), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(1071, 25), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(164, 430), ImGuiCond_FirstUseEver);
     ImGui::Begin("Processor", &showProcessor/*, ImGuiWindowFlags_NoResize*/);
 
     // CPU Flags
@@ -498,12 +509,12 @@ static void displayProcessor() {
     // IE
     ImGui::TextColored(*flagColor, "    IE: ");
     ImGui::SameLine();
-    ImGui::Text("%%%c%c%c%c%c%c%c%c", BYTE_TO_BINARY(emulator->getIE()));
+    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(emulator->getIE()));
 
     // IF
     ImGui::TextColored(*flagColor, "    IF: ");
     ImGui::SameLine();
-    ImGui::Text("%%%c%c%c%c%c%c%c%c", BYTE_TO_BINARY(emulator->getIF()));
+    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(emulator->getIF()));
 
     ImGui::Separator();
 
@@ -530,8 +541,8 @@ static void displayDisassembly() {
     if (!showDisassembly)
         return;
 
-    ImGui::SetNextWindowSize(ImVec2(276, 394), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(1063, 248), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(354, 430), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(1240, 25), ImGuiCond_FirstUseEver);
     ImGui::Begin("Disassembly", &showDisassembly);
     ImGui::BeginChild("DisassemblyView", ImVec2(ImGui::GetWindowWidth() - 10, ImGui::GetWindowHeight() - 60), true);
     if (disassembler) {
@@ -556,8 +567,8 @@ static void displayBreakpoints() {
     if (!showBreakpoints)
         return;
 
-    ImGui::SetNextWindowSize(ImVec2(145, 218), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(1227, 25), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(122, 180), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(1144, 460), ImGuiCond_FirstUseEver);
     ImGui::Begin("Breakpoints", &showBreakpoints);
     ImGui::BeginChild("BreakpointList", ImVec2(ImGui::GetWindowWidth() - 10, ImGui::GetWindowHeight() - 82), true);
     for (auto breakpoint: breakpoints) {
@@ -584,6 +595,49 @@ static void displayBreakpoints() {
 
     if (ImGui::Button("Clear"))
         breakpoints.clear();
+    ImGui::End();
+}
+
+static void displayTimers() {
+    if (!showTimers)
+        return;
+
+    ImGui::SetNextWindowSize(ImVec2(217, 201), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(1278, 459), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Timers", &showTimers);
+
+    ImGui::TextColored(*flagColor, "IE:");
+    ImGui::SameLine();
+    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(emulator->getTimerIE()));
+
+    ImGui::TextColored(*flagColor, "IF:");
+    ImGui::SameLine();
+    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(emulator->getTimerIF()));
+
+    for (int i = 0; i < 8; i++) {
+        auto &timer = emulator->getTimer(i);
+        ImGui::TextColored(timer.enabled ? *outputColor : *breakpointColor, "Timer%d:", i);
+        ImGui::SameLine();
+        ImGui::Text("%s/%u/%u (%u)", timer.repeat ? "(R) " : "", timer.divider, timer.compare, (uint32_t)timer.count);
+    }
+
+    ImGui::End();
+}
+
+static void displayPWM() {
+    if (!showPWM)
+        return;
+
+    ImGui::SetNextWindowSize(ImVec2(74, 168), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(1064, 472), ImGuiCond_FirstUseEver);
+    ImGui::Begin("PWM", &showPWM);
+
+    for (int i = 0; i < 8; i++) {
+        ImGui::TextColored(emulator->getPWMEnabled(i) ? *outputColor : *breakpointColor, "Ch%d:", i);
+        ImGui::SameLine();
+        ImGui::Text("%d", emulator->getPWMDuty(i));
+    }
+
     ImGui::End();
 }
 
@@ -624,6 +678,8 @@ static void runEmulator() {
                 SDL_QueueAudio(audioDevice, &emulator->getAudioSamples().front(), 1);
                 emulator->getAudioSamples().pop();
             }
+
+            emulator->updateTimers(1 << processorSpeeds[processorSpeed]);
 
             if (emulator->run()) {
                 halted = true;
@@ -690,6 +746,8 @@ static void mainLoop(void *arg) {
     displayProcessor();
     displayDisassembly();
     displayBreakpoints();
+    displayTimers();
+    displayPWM();
 
     // Render
     ImGui::Render();
@@ -707,7 +765,14 @@ int main(int argc, char* argv[]) {
     showIO = false;
     showGPIO = false;
     displayScale = 5;
+    showProcessor = false;
     showPrintLog = false;
+    showIO = false;
+    showGPIO = false;
+    showDisassembly = false;
+    showBreakpoints = false;
+    showTimers = false;
+    showPWM = false;
     controllerPeripheral = true;
     loadRom("Tetris.bin");
 #else
@@ -722,7 +787,7 @@ int main(int argc, char* argv[]) {
 #endif
 
     // Initialize SDL and OpenGL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER)) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER)) {
         std::cout << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
         return -1;
     }
@@ -741,7 +806,7 @@ int main(int argc, char* argv[]) {
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    window = SDL_CreateWindow("Emulator", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1482, 729, window_flags);
+    window = SDL_CreateWindow("Emulator", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1601, 730, window_flags);
     glContext = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, glContext);
     SDL_GL_SetSwapInterval(1); // Enable vsync
@@ -788,10 +853,14 @@ int main(int argc, char* argv[]) {
 
     // Create ImGui windows
     ramEditor = new MemoryEditor();
-    ramEditor->Open = false;
+    ramEditor->Open = true;
     romViewer = new MemoryEditor();
-    romViewer->Open = false;
+    romViewer->Open = true;
     romViewer->ReadOnly = true;
+#ifdef __EMSCRIPTEN__
+    ramEditor->Open = false;
+    romViewer->Open = false;
+#endif
 
     // 7-segment display font
     ImFontConfig config;

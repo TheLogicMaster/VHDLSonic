@@ -4,6 +4,8 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
 
+"${SCRIPT_DIR}/fetch_songs.sh"
+
 (
     cd "${SCRIPT_DIR}/programs" || exit -1
 
@@ -17,5 +19,11 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)"
     do
         echo "Compiling: $f"
         python ../assembler.py "$f" -t c
+    done
+
+    for f in ./*.bas
+    do
+        echo "Compiling: $f"
+        python ../assembler.py "$f" -t basic
     done
 )
