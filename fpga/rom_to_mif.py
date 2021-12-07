@@ -16,7 +16,7 @@ def main():
 
     f = open(sys.argv[2], 'w')
     f.writelines([
-        f"DEPTH = {int(0x10000 / 4)};\n",
+        f"DEPTH = {int(0x18000 / 4)};\n",
         "WIDTH = 32;\n",
         "ADDRESS_RADIX = DEC;\n",
         "DATA_RADIX = HEX;\n"

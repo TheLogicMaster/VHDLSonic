@@ -3,8 +3,8 @@
 #include "libraries/Sonic.h"
 #include "libraries/Graphics.h"
 
-#include "data/face.h"
-#include "data/face_sprite.h"
+#include "data/tiles/face.h"
+#include "data/tiles/face_sprite.h"
 
 int main() {
     copy_tiles(face, 1, 1);

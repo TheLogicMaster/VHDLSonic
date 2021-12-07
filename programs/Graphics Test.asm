@@ -71,8 +71,8 @@ hblank:
     inc r9
     rti
 
-face: bin "data/face.bin"
-face_sprite: bin "data/face_sprite.bin"
+face: bin "data/tiles/face.bin"
+face_sprite: bin "data/tiles/face_sprite.bin"
 
     data
     var[4] ; Padding to prevent memory boundary issues

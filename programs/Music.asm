@@ -1,4 +1,4 @@
-; Music
+; Music Player
 ; https://github.com/robsoncouto/arduino-songs
 
     jmp main
@@ -13,11 +13,13 @@
     include "libraries/Sonic.asm"
     include "libraries/Math.asm"
 
+    def buzzer_offset=16 ; Arduino pin 4
+
 main:
     ldr sp,stack ; Initialize stack
 
 ; Set buzzer pin to output mode
-    ldr r1,0
+    ldr r1,{buzzer_offset}
     ldr r0,1
     str r0,r1,{arduino_modes}
 
@@ -117,7 +119,7 @@ play_song_tone:
     bne play_song_tone
 
 ; Toggle buzzer pin
-    ldr r0,0
+    ldr r0,{buzzer_offset}
     xor r2,1
     str r2,r0,{arduino}
 

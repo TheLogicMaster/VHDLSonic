@@ -19,12 +19,12 @@ main:
     ldr r0,50000
     str r0,r1,{timer_prescale}
     ldr r0,1000
-    str r0,r1,{timer_compare}   ;one-shot
+    str r0,r1,{timer_compare}
 
 loop:
 ; 1 second delay
     ldr r0,0
-    str r0,r1,{timer_count}     ;clear T0
+    str r0,r1,{timer_count}
     ldr r0,1
     str r0,r1,{timer_enable}
 wait:

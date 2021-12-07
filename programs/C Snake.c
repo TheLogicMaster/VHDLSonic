@@ -3,9 +3,9 @@
 #include "libraries/Sonic.h"
 #include "libraries/Graphics.h"
 
-#include "data/snake_body.h"
-#include "data/snake_head.h"
-#include "data/apple.h"
+#include "data/tiles/snake_body.h"
+#include "data/tiles/snake_head.h"
+#include "data/tiles/apple.h"
 
 const unsigned char snake_title[100] = {
     0, 6, 1, 7, 2, 7, 3, 6, 3, 5, 2, 4, 1, 4, 0, 3, 0, 2, 1, 1, 2, 1, // S

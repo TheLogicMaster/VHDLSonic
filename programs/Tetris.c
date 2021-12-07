@@ -4,8 +4,8 @@
 #include "libraries/Graphics.h"
 #include "libraries/Print.h"
 
-#include "data/tetris_block.h"
-#include "data/font.h"
+#include "data/tiles/tetris_block.h"
+#include "data/tiles/font.h"
 
 #define GRID_WIDTH 10
 #define GRID_HEIGHT 15

@@ -15,13 +15,13 @@
 main:
     ldr sp,stack ; Initialize stack
 
-    ; Initialize display with address 0x3C
+; Initialize display with address 0x3C
     ldr r0,$3C
     stb r0,[ssd1306_addr]
     jsr setup_ssd1306
 
 loop:
-    ; Clear screen
+; Clear screen
     ldr r0,$0
     stb r0,[ssd1306_color]
     jsr ssd1306_clear
@@ -42,7 +42,7 @@ draw_lines:
     dec r0
     cmp r0,15
     bne draw_lines
-;
+
 ; Update display with display buffer
     jsr ssd1306_update
 
@@ -52,7 +52,7 @@ draw_lines:
 
     bra loop
 
-    image: bin "data/lm8.bin"
+    image: bin "data/oled/lm8.bin"
 
     data
     align 4

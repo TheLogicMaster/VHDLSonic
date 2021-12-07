@@ -19,4 +19,5 @@ loop:
     bra loop
 
     data
+    align 4
 stack: ; Don't put anything after this line

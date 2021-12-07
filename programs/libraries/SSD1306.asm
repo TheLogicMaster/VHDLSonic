@@ -316,6 +316,7 @@ ssd1306_draw_image_loop_:
 ssd1306_display:
     push r0
     push r1
+    push r2
 
     ldb r0,[ssd1306_addr]
 
@@ -355,6 +356,80 @@ ssd1306_display_loop_:
 
     jsr i2c_stop
 
+    pop r2
+    pop r1
+    pop r0
+    ret
+
+
+; Draw a compressed 128x64 binary image at [r2] to the display directly
+; Leaves r2 past the end of the image
+ssd1306_display_compressed:
+    push r0
+    push r1
+    push r3
+    push r4
+    push r6
+
+    ldb r0,[ssd1306_addr]
+
+; Set display start address
+    jsr i2c_start_write
+    ldr r1,$0
+    jsr i2c_send_byte
+    ldr r1,$22
+    jsr i2c_send_byte
+    ldr r1,$00
+    jsr i2c_send_byte
+    ldr r1,$FF
+    jsr i2c_send_byte
+    ldr r1,$21
+    jsr i2c_send_byte
+    ldr r1,$0
+    jsr i2c_send_byte
+    jsr i2c_stop
+    jsr i2c_start_write
+    ldr r1,$0
+    jsr i2c_send_byte
+    ldr r1,$7F
+    jsr i2c_send_byte
+    jsr i2c_stop
+
+    jsr i2c_start_write
+    ldr r1,$40
+    jsr i2c_send_byte
+
+    ldr r1,0 ; Current data
+    ldr r3,0 ; Remaining pixels
+    ldr r4,0 ; Current color
+    ldr r6,0 ; Current data shift
+ssd1306_display_compressed_loop_:
+    ldb r0,r2++
+    beq ssd1306_display_compressed_done_
+    tfr r3,r0
+    and r3,$7F
+    lsr r0,7
+    tfr r4,r0
+ssd1306_display_compressed_extract_:
+    tfr r0,r4
+    lsl r0,r6
+    or r1,r0
+    inc r6
+    cmp r6,7
+    ble ssd1306_display_compressed_not_data_
+    jsr i2c_send_byte
+    ldr r6,0
+    ldr r1,0
+ssd1306_display_compressed_not_data_:
+    dec r3
+    bne ssd1306_display_compressed_extract_
+    bra ssd1306_display_compressed_loop_
+ssd1306_display_compressed_done_:
+    jsr i2c_stop
+
+    pop r6
+    pop r4
+    pop r3
     pop r1
     pop r0
     ret

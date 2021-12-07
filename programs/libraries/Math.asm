@@ -9,7 +9,6 @@ mod_loop_:
     cmp r0,r1
     blo mod_done_
     sub r0,r1
-    ;inc r2          ;modified so r2 returns how many times the subtraction been done aka returns quotient
     bra mod_loop_
 mod_done_:
     ret
