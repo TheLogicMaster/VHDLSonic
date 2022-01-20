@@ -11,16 +11,36 @@
 
 
     include "libraries/Sonic.asm"
+    include "libraries/Print.asm"
 
 
 message: db "Hello World!\n",0
+message_format: db "%s %%  %c %i %x",0
+
 
 main:
-    ldr r2,message
-print:
-    inc r2
-    ldb r3,r2,-1
-    str r3,[{serial}]
-    bne print
+    ldr sp,stack
+
+; Print string without formatting
+    ldr r0,message
+    jsr print
+
+; Print format string
+    tfr r2,sp
+    ldr r0,$123
+    push r0
+    ldr r0,-123
+    push r0
+    ldr r0,'A'
+    push r0
+    ldr r0,message
+    push r0
+    ldr r0,message_format
+    jsr printf
+    tfr sp,r2
 
     halt
+
+
+    data
+stack:

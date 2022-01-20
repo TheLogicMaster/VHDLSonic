@@ -1,7 +1,9 @@
 package com.thelogicmaster.vhdl_sonic.psi;
 
+import com.intellij.navigation.ItemPresentation;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.impl.FakePsiElement;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.Nullable;
 
 public class AssemblyDocumentationElement extends FakePsiElement {
@@ -20,6 +22,11 @@ public class AssemblyDocumentationElement extends FakePsiElement {
 
 	@Nullable
 	public String getDocumentation() {
+		return documentation;
+	}
+
+	@Override
+	public @Nullable @NonNls String getText () {
 		return documentation;
 	}
 }

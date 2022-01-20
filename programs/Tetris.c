@@ -175,11 +175,6 @@ int poll_controls() {
     return 0;
 }
 
-void clear_bg() {
-    for (int i = 0; i < 64 * 64; i++)
-        BG_Data[i] = 0;
-}
-
 void draw_title_screen() {
     clear_bg();
     draw_text("Tetris", FONT_INDEX, 17, 10);

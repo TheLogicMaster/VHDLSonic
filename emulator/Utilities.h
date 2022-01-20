@@ -30,4 +30,8 @@ inline uint32_t reverseWordBytes(uint32_t value) {
     return result;
 }
 
+inline uint16_t reverseHalfWordBytes(uint16_t value) {
+    return (value & 0xFF) << 8 | (value & 0xFF00) >> 8;
+}
+
 #endif //EMULATOR_UTILITIES_H

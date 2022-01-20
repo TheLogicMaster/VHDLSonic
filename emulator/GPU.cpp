@@ -33,8 +33,8 @@ uint8_t *GPU::getDisplayBuffer() {
     return reinterpret_cast<uint8_t *>(displayBuffer);
 }
 
-uint32_t GPU::read(uint32_t address) {
-    switch (address) {
+uint32_t GPU::read(uint32_t index) {
+    switch (index) {
         case RENDER_ADDRESS: // Enable rendering
             return render;
         case H_SCROLL_ADDRESS: // Horizontal scroll
@@ -46,16 +46,16 @@ uint32_t GPU::read(uint32_t address) {
         case WINDOW_Y_ADDRESS: // Window Y coord
             return windowY;
         case PALETTE_ADDRESS ... PALETTE_ADDRESS + PALETTE_SIZE - 1: // 16 palette colors
-            return palette[address - PALETTE_ADDRESS].r << 16
-                | palette[address - PALETTE_ADDRESS].g << 8
-                | palette[address - PALETTE_ADDRESS].b;
+            return palette[index - PALETTE_ADDRESS].r << 16
+                | palette[index - PALETTE_ADDRESS].g << 8
+                | palette[index - PALETTE_ADDRESS].b;
         case TILE_ADDRESS ... TILE_ADDRESS + TILE_DATA_SIZE - 1: // Tile data
-            return tileData[(address - TILE_ADDRESS) / TILE_WIDTH][(address - TILE_ADDRESS) % TILE_WIDTH];
+            return tileData[(index - TILE_ADDRESS) / TILE_WIDTH][(index - TILE_ADDRESS) % TILE_WIDTH];
         case BG_ADDRESS ... BG_ADDRESS + BG_DATA_SIZE - 1: // Background data
-            return backgroundData[address - BG_ADDRESS];
+            return backgroundData[index - BG_ADDRESS];
         case SPRITE_ADDRESS ... SPRITE_ADDRESS + SPRITE_COUNT - 1: // Sprite data
         {
-            Sprite sprite = sprites[address - SPRITE_ADDRESS];
+            Sprite sprite = sprites[index - SPRITE_ADDRESS];
             return sprite.firstTile << 20
                 | sprite.x << 11
                 | sprite.y << 2
@@ -67,8 +67,8 @@ uint32_t GPU::read(uint32_t address) {
     }
 }
 
-void GPU::write(uint32_t address, uint32_t value) {
-    switch (address) {
+void GPU::write(uint32_t index, uint32_t value) {
+    switch (index) {
         case RENDER_ADDRESS: // Enable rendering
             render = value;
             break;
@@ -85,23 +85,23 @@ void GPU::write(uint32_t address, uint32_t value) {
             windowY = value;
             break;
         case PALETTE_ADDRESS ... PALETTE_ADDRESS + PALETTE_SIZE - 1: // 16 palette colors
-            palette[address - PALETTE_ADDRESS] = {
+            palette[index - PALETTE_ADDRESS] = {
                     (uint8_t) (value >> 16),
                     (uint8_t) ((value >> 8) & 0xFF),
                     (uint8_t) (value & 0xFF)
             };
             break;
         case TILE_ADDRESS ... TILE_ADDRESS + TILE_DATA_SIZE - 1: // Tile data
-            tileData[(address - TILE_ADDRESS) / TILE_WIDTH][(address - TILE_ADDRESS) % TILE_WIDTH] = value;
+            tileData[(index - TILE_ADDRESS) / TILE_WIDTH][(index - TILE_ADDRESS) % TILE_WIDTH] = value;
             break;
         case BG_ADDRESS ... BG_ADDRESS + BG_DATA_SIZE - 1: // Background data
-            backgroundData[address - BG_ADDRESS] = value;
+            backgroundData[index - BG_ADDRESS] = value;
             break;
         case WINDOW_ADDRESS ... WINDOW_ADDRESS + WINDOW_DATA_SIZE - 1: // Window data
-            windowData[address - WINDOW_ADDRESS] = value;
+            windowData[index - WINDOW_ADDRESS] = value;
             break;
         case SPRITE_ADDRESS ... SPRITE_ADDRESS + SPRITE_COUNT - 1: // Sprite data
-            sprites[address - SPRITE_ADDRESS] = {
+            sprites[index - SPRITE_ADDRESS] = {
                     (uint8_t) ((value >> 20) & 0xFF),
                     (uint16_t) ((value >> 11) & 0x1FF),
                     (uint8_t) ((value >> 2) & 0x1FF),

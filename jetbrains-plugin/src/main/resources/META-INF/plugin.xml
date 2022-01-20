@@ -28,8 +28,7 @@
   <vendor url="https://thelogicmaster.com">TheLogicMaster</vendor>
 
   <actions>
-    <action id="NewAssemblyFile" class="com.thelogicmaster.vhdl_sonic.AssemblyFileCreateAction"/>
-    <action id="NewCFile" class="com.thelogicmaster.vhdl_sonic.CFileCreateAction"/>
+
   </actions>
 
   <extensions defaultExtensionNs="com.intellij">

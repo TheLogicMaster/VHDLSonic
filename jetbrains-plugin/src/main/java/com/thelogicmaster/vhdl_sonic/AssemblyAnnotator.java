@@ -120,7 +120,7 @@ public class AssemblyAnnotator implements Annotator {
 				ensureOperandsOrder(instruction, holder, operands, evaluated, CONSTANT_OPERANDS);
 			else if (operands.size() != 0)
 				annotateInstructionError(INVALID_OPERANDS, instruction, holder);
-		} else if (Pattern.matches("^(db)$", mnemonic)) {
+		} else if (Pattern.matches("^(db|dw|dd)$", mnemonic)) {
 			for (ASTNode operand: operands)
 				if (operand.getElementType() != AssemblyTypes.STRING && operand.getElementType() != AssemblyTypes.CONSTANT)
 					holder.newAnnotation(HighlightSeverity.ERROR, "Invalid constant")
@@ -135,7 +135,7 @@ public class AssemblyAnnotator implements Annotator {
 					.range(operands.get(0))
 					.highlightType(ProblemHighlightType.WARNING)
 					.create();
-		} else if (Pattern.matches("^(def)$", mnemonic)) {
+		} else if (Pattern.matches("^(def|ifndef|label)$", mnemonic)) {
 			ensureOperandsOrder(instruction, holder, operands, evaluated, DEFINITION_OPERANDS);
 		} else
 			annotateInstructionError("Invalid instruction mnemonic", instruction, holder);

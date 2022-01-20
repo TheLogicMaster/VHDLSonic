@@ -38,3 +38,8 @@ void draw_text(const char* string, int font_first_tile, int x, int y) {
         BG_Data[index++] = font_first_tile + offset;
     }
 }
+
+void clear_bg() {
+    for (int i = 0; i < 64 * 64; i++)
+        BG_Data[i] = 0;
+}

@@ -1,88 +1,30 @@
 // Print and printf functionality
 
-#include "Sonic.h"
+#pragma include "libraries/Print.asm"
 
+#ifndef PRINTF_BUFFER
 #define PRINTF_BUFFER 64
+#endif
 
-void print(const char* string) {
-    while(*string)
-        Serial = *(string++);
-}
+#define printf printf_wrapper
+#define sprintf sprintf_wrapper
 
-void sprintf_internal(char *buffer, const char** format) {
-    char *buffer_ptr = buffer;
+void print(const char *string) =
+    "\tldr r0,sp,-4\n"
+    "\tjsr print";
 
-    const char *format_ptr = *format;
+void sprintf_internal(char *buffer, const char *format, int *params) =
+    "\tldr r0,sp,-4\n"
+    "\tldr r1,sp,-8\n"
+    "\tldr r2,sp,-12\n"
+    "\tjsr sprintf_internal_";
 
-    int *arg_ptr = (int*)format - 1;
-
-    int count;
-    char digits[5];
-
-    char prev = 0;
-    while (*format_ptr) {
-        if (prev == '%') {
-            if (*format_ptr == '%') {
-                *(buffer_ptr++) = '%';
-            } else if (*format_ptr == 'd' || *format_ptr == 'i') {
-                int value = *(arg_ptr--);
-                if (value < 0) {
-                    *(buffer_ptr++) = '-';
-                    value = -value;
-                } else if (value == 0)
-                    *(buffer_ptr++) = '0';
-                count = 0;
-                while (value > 0) {
-                    digits[count++] = '0' + value % 10;
-                    value /= 10;
-                }
-                for (int i = 0; i < count; i++)
-                    *(buffer_ptr++) = digits[count - 1 - i];
-            } else if (*format_ptr == 'u') {
-                unsigned int value = *(unsigned int*)(arg_ptr--);
-                if (value == 0)
-                    *(buffer_ptr++) = '0';
-                count = 0;
-                while (value > 0) {
-                    digits[count++] = '0' + value % 10;
-                    value /= 10;
-                }
-                for (int i = 0; i < count; i++)
-                    *(buffer_ptr++) = digits[count - 1 - i];
-            } else if (*format_ptr == 'x') {
-                unsigned int value = *(unsigned int*)(arg_ptr--);
-                if (value == 0)
-                    *(buffer_ptr++) = '0';
-                count = 0;
-                while (value > 0) {
-                    unsigned int adjusted = value % 16;
-                    digits[count++] = (adjusted < 10 ? '0' : 'A' - 10) + adjusted;
-                    value /= 16;
-                }
-                for (int i = 0; i < count; i++)
-                    *(buffer_ptr++) = digits[count - 1 - i];
-            } else if (*format_ptr == 'c') {
-                *(buffer_ptr++) = *(arg_ptr--);
-            } else if (*format_ptr == 's') {
-                char *string = *(char**)(arg_ptr--);
-                while(*string)
-                    *(buffer_ptr++) = *(string++);
-            }
-        } else if (*format_ptr != '%') {
-            *(buffer_ptr++) = *format_ptr;
-        }
-        prev = *format_ptr;
-        format_ptr++;
-    }
-    *buffer_ptr = 0;
-}
-
-void sprintf(char *buffer, const char* format, ...) {
-    sprintf_internal(buffer, &format);
-}
-
-void printf(const char* format, ...) {
+void printf_wrapper(const char* format, ...) {
     char buffer[PRINTF_BUFFER];
-    sprintf_internal(buffer, &format);
+    sprintf_internal(buffer, format, (int*)&format - 1);
     print(buffer);
+}
+
+void sprintf_wrapper(char *buffer, const char* format, ...) {
+    sprintf_internal(buffer, format, (int*)&format - 1);
 }

@@ -1,8 +1,12 @@
 // VHDLSonic C interfaces
 
+#pragma include "libraries/C Utilities.asm"
+
+// CPU registers
 extern int IE, IF;
 extern int Random;
 
+// Microcontroller registers
 extern int LEDs[10];
 extern int Seven_Segment[6];
 extern int GPIO[36];
@@ -26,6 +30,7 @@ extern int Timer_Prescale[8];
 extern int Timer_Enable[8];
 extern int Timer_Compare[8];
 
+// Graphics registers
 extern int Render;
 extern int H_Scroll, V_Scroll;
 extern int Window_X, Window_Y;
@@ -35,10 +40,14 @@ extern int BG_Data[64 * 64];
 extern int Win_Data[40 * 30];
 extern int Sprites[32];
 
-extern void error();
-extern void reset();
-extern void cli();
-extern void sei();
+// Audio registers
+extern int Audio_Channels[3];
+
+// Inline instruction wrappers
+void cli() = "\tcli";
+void sei() = "\tsei";
+void error() = "\tint 1";
+void reset() = "\tint 0";
 
 // Utils
 extern void memcpy(void *dest, const void *src, unsigned int size);

@@ -36,11 +36,13 @@ public class AssemblyRunConfigurationProducer extends LazyRunConfigurationProduc
 		String params = "";
 
 		if (!settings.emulatorPath.isEmpty())
-			params = params + " -e \"" + settings.emulatorPath + "\"";
+			params = params + " --emulator \"" + settings.emulatorPath + "\"";
 		if (!settings.compilerPath.isEmpty())
-			params = params + " -c \"" + settings.compilerPath + "\"";
+			params = params + " --compiler \"" + settings.compilerPath + "\"";
 
-		params += " -r \"" + sourceElement.get().getContainingFile().getVirtualFile().getPath() + "\"";
+		params += " --type assembly --fpga none";
+
+		params += " --run \"" + sourceElement.get().getContainingFile().getVirtualFile().getPath() + "\"";
 
 		configuration.setScriptParameters(params);
 		configuration.setName("Run " + sourceElement.get().getContainingFile().getName().split("\\.")[0]);

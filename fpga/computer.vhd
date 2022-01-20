@@ -46,6 +46,9 @@ entity computer is
 end entity;
 
 architecture impl of computer is
+	constant USE_LCD : boolean := false;
+	constant USE_APU : boolean := true;
+
 	component cpu is
 		port (
 			clock : in std_logic;
@@ -93,7 +96,7 @@ architecture impl of computer is
 			hex5 : out std_logic_vector(7 downto 0)
 		);
 	end component;
-	
+
 	component gpu is
 		port (
 			address : in std_logic_vector(31 downto 0);
@@ -102,15 +105,85 @@ architecture impl of computer is
 			reset : in std_logic;
 			data_in : in std_logic_vector(31 downto 0);
 			data_out : out std_logic_vector(31 downto 0);
+			pixel : out std_logic_vector(15 downto 0);
+			pixel_x : in std_logic_vector(9 downto 0);
+			pixel_y : in std_logic_vector(8 downto 0);
+			sprite_index : in std_logic_vector(5 downto 0);
+			sprite_cache_index : in std_logic_vector(5 downto 0);
+			sprite_cache_write : in std_logic;
+			sprite_cache_clear : in std_logic;
+			bg_x : in std_logic_vector(9 downto 0);
+			bg_y : in std_logic_vector(8 downto 0);
+			rendering : out std_logic;
+			blanking : in std_logic;
+			ticks : in std_logic_vector(1 downto 0)
+		);
+	end component;							
+	
+	component vga_driver is
+		port (
+			clock : in std_logic;
+			reset : in std_logic;
+			pixel : in std_logic_vector(15 downto 0);
+			pixel_x : out std_logic_vector(9 downto 0);
+			pixel_y : out std_logic_vector(8 downto 0);
+			sprite_index : out std_logic_vector(5 downto 0);
+			sprite_cache_index : out std_logic_vector(5 downto 0);
+			sprite_cache_write : out std_logic;
+			sprite_cache_clear : out std_logic;
+			bg_x : out std_logic_vector(9 downto 0);
+			bg_y : out std_logic_vector(8 downto 0);
+			rendering : in std_logic;
+			blanking : out std_logic;
+			ticks : out std_logic_vector(1 downto 0);
+			vblank : out std_logic;
+			hblank : out std_logic;
 			vga_r : out std_logic_vector(3 downto 0);
 			vga_g : out std_logic_vector(3 downto 0);
 			vga_b : out std_logic_vector(3 downto 0);
 			vga_hs : out std_logic;
-			vga_vs : out std_logic;
+			vga_vs : out std_logic
+		);
+	end component;
+	
+	component lcd_driver is
+		port (
+			clock : in std_logic;
+			reset : in std_logic;
+			pixel : in std_logic_vector(15 downto 0);
+			pixel_x : out std_logic_vector(9 downto 0);
+			pixel_y : out std_logic_vector(8 downto 0);
+			sprite_index : out std_logic_vector(5 downto 0);
+			sprite_cache_index : out std_logic_vector(5 downto 0);
+			sprite_cache_write : out std_logic;
+			sprite_cache_clear : out std_logic;
+			bg_x : out std_logic_vector(9 downto 0);
+			bg_y : out std_logic_vector(8 downto 0);
+			rendering : in std_logic;
+			blanking : out std_logic;
+			ticks : out std_logic_vector(1 downto 0);
 			vblank : out std_logic;
-			hblank : out std_logic
+			hblank : out std_logic;
+			lcd_data : out std_logic_vector(7 downto 0);
+			lcd_write : out std_logic;
+			lcd_command : out std_logic;
+			lcd_enable : out std_logic
 		);
 	end component;						
+	
+	component apu is
+		port (
+			address : in std_logic_vector(31 downto 0);
+			write_en : in std_logic;
+			clock : in std_logic;
+			reset : in std_logic;
+			data_in : in std_logic_vector(31 downto 0);
+			data_out : out std_logic_vector(31 downto 0);
+			i2s_bck : buffer std_logic;
+			i2s_din : out std_logic;
+			i2s_lrck : buffer std_logic
+		);
+	end component;
 	
 	component power_on_reset is
 		port (
@@ -120,12 +193,30 @@ architecture impl of computer is
 		);
 	end component;
 	
+	signal arduino : std_logic_vector(15 downto 0);
+	signal gpio_pins : std_logic_vector(35 downto 0);
+	
+	-- GPU signals
+	signal gpu_pixel : std_logic_vector(15 downto 0);
+	signal gpu_pixel_x : std_logic_vector(9 downto 0);
+	signal gpu_pixel_y : std_logic_vector(8 downto 0);
+	signal gpu_sprite_index : std_logic_vector(5 downto 0);
+	signal gpu_sprite_cache_index : std_logic_vector(5 downto 0);
+	signal gpu_sprite_cache_write : std_logic;
+	signal gpu_sprite_cache_clear : std_logic;
+	signal gpu_bg_x : std_logic_vector(9 downto 0);
+	signal gpu_bg_y : std_logic_vector(8 downto 0);
+	signal gpu_rendering : std_logic;
+	signal gpu_blanking : std_logic;
+	signal gpu_ticks : std_logic_vector(1 downto 0);
+	
 	-- Data bus
 	signal cpu_in : std_logic_vector(31 downto 0);
 	signal data : std_logic_vector(31 downto 0);
 	signal memory_data : std_logic_vector(31 downto 0);
 	signal microcontroller_data : std_logic_vector(31 downto 0);
 	signal gpu_data : std_logic_vector(31 downto 0);
+	signal apu_data : std_logic_vector(31 downto 0);
 	signal address : std_logic_vector(31 downto 0); -- Address line
 	signal data_mask : std_logic_vector(3 downto 0); -- Data line mask
 	signal write_en : std_logic; -- Write enable line
@@ -151,9 +242,20 @@ begin
 		memory_data when to_integer(unsigned(address)) < 16#20000#
 		else gpu_data when to_integer(unsigned(address)) >= 16#30000# and to_integer(unsigned(address)) < 16#40000#
 		else microcontroller_data when to_integer(unsigned(address)) >= 16#40000# and to_integer(unsigned(address)) < 16#50000#
+		else apu_data when to_integer(unsigned(address)) >= 16#50000# and to_integer(unsigned(address)) < 16#60000#
 		else x"00000000";
 	
 	interrupts <= 3x"0" & int_timer & int_hblank & int_vblank & 2x"0";
+	
+	lcd_pins : if not USE_LCD generate
+		ARDUINO_IO(11 downto 0) <= arduino(11 downto 0);
+	end generate;
+	ARDUINO_IO(15 downto 12) <= arduino(15 downto 12);
+	
+	apu_pins : if not USE_APU generate
+		GPIO(35 downto 33) <= gpio_pins(35 downto 33);
+	end generate;
+	GPIO(32 downto 0) <= gpio_pins(32 downto 0);
 	
 	prcoessor : cpu
 		port map (
@@ -189,8 +291,8 @@ begin
 			timer_int => int_timer,
 			buttons => KEY,
 			switches => SW,
-			gpio => GPIO,
-			arduino => ARDUINO_IO,
+			gpio => gpio_pins,
+			arduino => arduino,
 			leds => LEDR,
 			hex0 => HEX0,
 			hex1 => HEX1,
@@ -204,18 +306,89 @@ begin
 		port map (
 			address => address,
 			write_en => write_en,
-			clock => clock,
+			clock => MAX10_CLK1_50,
 			reset => reset,
 			data_in => data,
 			data_out => gpu_data,
-			vga_r => VGA_R,
-			vga_g => VGA_G,
-			vga_b => VGA_B,
-			vga_hs => VGA_HS,
-			vga_vs => VGA_VS,
-			vblank => int_vblank,
-			hblank => int_hblank
+			pixel => gpu_pixel,
+			pixel_x => gpu_pixel_x,
+			pixel_y => gpu_pixel_y,
+			sprite_index => gpu_sprite_index,
+			sprite_cache_index => gpu_sprite_cache_index,
+			sprite_cache_write => gpu_sprite_cache_write,
+			sprite_cache_clear => gpu_sprite_cache_clear,
+			bg_x => gpu_bg_x,
+			bg_y => gpu_bg_y,
+			rendering => gpu_rendering,
+			blanking => gpu_blanking,
+			ticks => gpu_ticks
 		);
+
+	audio_driver : if USE_APU generate
+		audio : apu
+			port map (
+				address => address,
+				write_en => write_en,
+				clock => MAX10_CLK1_50,
+				reset => reset,
+				data_in => data,
+				data_out => apu_data,
+				i2s_bck => GPIO(33),
+				i2s_din => GPIO(34),
+				i2s_lrck => GPIO(35)
+			);
+	end generate;
+		
+	display_driver : if USE_LCD generate
+		lcd : lcd_driver
+			port map (
+				clock => MAX10_CLK1_50,
+				reset => reset,
+				pixel => gpu_pixel,
+				pixel_x => gpu_pixel_x,
+				pixel_y => gpu_pixel_y,
+				sprite_index => gpu_sprite_index,
+				sprite_cache_index => gpu_sprite_cache_index,
+				sprite_cache_write => gpu_sprite_cache_write,
+				sprite_cache_clear => gpu_sprite_cache_clear,
+				bg_x => gpu_bg_x,
+				bg_y => gpu_bg_y,
+				rendering => gpu_rendering,
+				blanking => gpu_blanking,
+				ticks => gpu_ticks,
+				vblank => int_vblank,
+				hblank => int_hblank,
+				lcd_data => ARDUINO_IO(7 downto 0),
+				lcd_write => ARDUINO_IO(9),
+				lcd_command => ARDUINO_IO(10),
+				lcd_enable => ARDUINO_IO(11)
+			);
+	else generate
+		vga : vga_driver
+			port map (
+				clock => MAX10_CLK1_50,
+				reset => reset,
+				pixel => gpu_pixel,
+				pixel_x => gpu_pixel_x,
+				pixel_y => gpu_pixel_y,
+				sprite_index => gpu_sprite_index,
+				sprite_cache_index => gpu_sprite_cache_index,
+				sprite_cache_write => gpu_sprite_cache_write,
+				sprite_cache_clear => gpu_sprite_cache_clear,
+				bg_x => gpu_bg_x,
+				bg_y => gpu_bg_y,
+				rendering => gpu_rendering,
+				blanking => gpu_blanking,
+				ticks => gpu_ticks,
+				vblank => int_vblank,
+				hblank => int_hblank,
+				vga_r => VGA_R,
+				vga_g => VGA_G,
+				vga_b => VGA_B,
+				vga_hs => VGA_HS,
+				vga_vs => VGA_VS
+			);
+	end generate;
 
 	por : power_on_reset
 		port map (

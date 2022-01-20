@@ -2,11 +2,11 @@
 
 # https://github.com/robsoncouto/arduino-songs
 
-# Converts an Arduino Song ino file into a binary file for the Music program
-# Pipe in the file using something like cat or curl
+# Converts an Arduino Song ino or MIDI file into a binary file for the Music programs
 
-import sys
+import argparse
 import re
+import pretty_midi
 
 NOTES = {
     'NOTE_B0': 31,
@@ -101,49 +101,108 @@ NOTES = {
     'REST': 0
 }
 
+SQUARE_CHANNELS = 3
+
+
+# Get note bytes from float frequency and integer duration in millis
+def note_to_bytes(frequency, duration):
+    data = bytearray()
+    period = int(44000 / frequency) if frequency else 0  # Period in samples
+    i = 0
+    while duration > 0:
+        data += bytearray(4)
+        length = min(duration, 2**12)
+        data[i] = (length >> 8) & 0xFF
+        data[i + 1] = length & 0xFF
+        data[i + 2] = (period >> 8) & 0xFF
+        data[i + 3] = period & 0xFF
+        i += 4
+        duration -= 2**12
+    return data
+
 
 def main():
-    if len(sys.argv) != 2 and len(sys.argv) != 3:
-        print('Usage: python3 song_converter.py <song_out>.bin <optional_tempo>')
-        exit(-1)
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('input', help='The input file')
+    parser.add_argument('output', help='The output file')
+    parser.add_argument('-m', '--mode', default='midi', choices=['arduino', 'midi'], help='The type of input file')
+    parser.add_argument('-t', '--tempo', type=int, help='Override music tempo')
+    args = parser.parse_args()
 
-    tempo = None
+    tracks = []
 
-    notes = []
-    for line in sys.stdin.readlines():
-        cleaned = line.replace(' ', '')
-        tempo_match = re.search(r'tempo=(\d+)', cleaned)
-        if tempo_match:
-            tempo = int(tempo_match[1])
-        for match in re.findall(r'(NOTE_[A-G]S?\d|REST),(-?\d+)', cleaned):
-            notes.append({
-                'note': match[0],
-                'length': match[1]
-            })
+    if args.mode == 'arduino':
+        tempo = None
 
-    if len(sys.argv) == 3:
-        tempo = int(sys.argv[2])
+        notes = []
+        for line in open(args.input):
+            cleaned = line.replace(' ', '')
+            tempo_match = re.search(r'tempo=(\d+)', cleaned)
+            if tempo_match:
+                tempo = int(tempo_match[1])
+            for match in re.findall(r'(NOTE_[A-G]S?\d|REST),(-?\d+)', cleaned):
+                notes.append({
+                    'note': match[0],
+                    'length': match[1]
+                })
 
-    if tempo is None:
-        print('Warning: Could not determine song tempo')
-        tempo = 120
+        if args.tempo:
+            tempo = args.tempo
 
-    whole_note = int(240000 / tempo)  # Whole note length in millis
+        if tempo is None:
+            print('Warning: Could not determine song tempo, defaulting to 120 BPM')
+            tempo = 120
 
-    data = bytearray(len(notes) * 4 + 4)
+        whole_note = int(240000 / tempo)  # Whole note length in millis
+        data = bytearray()
+        for i in range(len(notes)):
+            length = int(notes[i]['length'])
+            duration = int(whole_note * (1 / abs(length)) * (3 / 2 if length < 0 else 1))
+            data += note_to_bytes(NOTES[notes[i]['note']], duration)
+        data += bytearray(4)
+        tracks.append(data)
+    else:
+        channels = [[] for _ in range(SQUARE_CHANNELS)]
+        midi_data = pretty_midi.PrettyMIDI(args.input)
+        for instrument in midi_data.instruments:
+            if instrument.is_drum:
+                continue
+            for note in instrument.notes:
+                for channel in channels:
+                    placed = False
+                    for i in range(len(channel)):
+                        if note.end <= channel[i].start and (i == 0 or channel[i - 1].end <= note.start):
+                            channel.insert(i, note)
+                            placed = True
+                            break
+                    else:
+                        if len(channel) == 0 or note.start >= channel[-1].end:
+                            channel.append(note)
+                            break
+                    if placed:
+                        break
+                else:
+                    print(f"Warning: Insufficient channels, dropped note at {round(note.start, 2)} seconds")
+        for channel in channels:
+            data = bytearray()
+            for i in range(len(channel)):
+                note = channel[i]
+                data += note_to_bytes(pretty_midi.note_number_to_hz(channel[i].pitch), int((note.end - note.start) * 1000))
+                if i < len(channel) - 1 and (rest := int((channel[i + 1].start - note.end) * 1000)) > 0:
+                    data += note_to_bytes(0, rest)
+            data += bytearray(2)
+            tracks.append(data)
 
-    for i in range(len(notes)):
-        frequency = NOTES[notes[i]['note']]
-        period = int(1000000 / frequency) if frequency else 0  # Period in microseconds
-        length = int(notes[i]['length'])
-        duration = int(whole_note * (1 / abs(length)) * (3 / 2 if length < 0 else 1))
-        data[i * 4] = (duration >> 8) & 0xFF
-        data[i * 4 + 1] = duration & 0xFF
-        data[i * 4 + 2] = (period >> 8) & 0xFF
-        data[i * 4 + 3] = period & 0xFF
-
-    f = open(sys.argv[1], "wb")
-    f.write(data)
+    f = open(args.output, "wb")
+    offset = 2 * SQUARE_CHANNELS
+    for i in range(SQUARE_CHANNELS):
+        if i < len(tracks):
+            f.write(bytes([offset >> 8, offset & 0xFF]))
+            offset += len(tracks[i])
+        else:
+            f.write(bytes([0, 0]))
+    for track in tracks:
+        f.write(track)
     f.close()
 
 

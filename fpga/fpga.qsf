@@ -1993,9 +1993,15 @@ set_global_assignment -name QIP_FILE adc/synthesis/adc.qip
 set_global_assignment -name VHDL_FILE adc/synthesis/adc.vhd
 set_global_assignment -name VHDL_FILE gpu.vhd
 set_global_assignment -name ALLOW_ANY_RAM_SIZE_FOR_RECOGNITION OFF
-set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
-set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
-set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+set_global_assignment -name VHDL_FILE gpu_test.vhd
+set_global_assignment -name VHDL_FILE gpu_lcd.vhd
+set_global_assignment -name VHDL_FILE gpu_lcd_test.vhd
+set_global_assignment -name VHDL_FILE lcd_test.vhd
+set_global_assignment -name VHDL_FILE apu_test.vhd
+set_global_assignment -name VHDL_FILE apu.vhd
+set_global_assignment -name VHDL_FILE audio_test.vhd
+set_global_assignment -name VHDL_FILE vga_driver.vhd
+set_global_assignment -name VHDL_FILE lcd_driver.vhd
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to ADC_CLK_10
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to MAX10_CLK1_50
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to MAX10_CLK2_50
@@ -2181,6 +2187,8 @@ set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to GPIO[32]
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to GPIO[33]
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to GPIO[34]
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to GPIO[35]
-set_global_assignment -name VHDL_FILE gpu_test.vhd
-set_global_assignment -name SLD_FILE db/debug_auto_stripped.stp
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
+set_global_assignment -name SLD_FILE db/debug_auto_stripped.stp

@@ -2,10 +2,8 @@
 
 #include "libraries/Sonic.h"
 
-void inline_asm() = "halt ; Denied!";
-
 int main() {
     LEDs[0] = 1;
-    inline_asm();
+    __asm("halt ; Denied!");
     LEDs[0] = 0;
 }

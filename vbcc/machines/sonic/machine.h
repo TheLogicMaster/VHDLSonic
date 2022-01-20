@@ -54,7 +54,7 @@ struct AddressingMode{
 //#define HAVE_TARGET_ATTRIBUTES
 
 /* We have target-specific pragmas */
-//#define HAVE_TARGET_PRAGMAS
+#define HAVE_TARGET_PRAGMAS
 
 // Keep track of all registered modified by a function
 //#define HAVE_REGS_MODIFIED 1

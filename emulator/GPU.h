@@ -76,8 +76,8 @@ public:
     int update();
     void reset();
     uint8_t *getDisplayBuffer();
-    uint32_t read(uint32_t address);
-    void write(uint32_t address, uint32_t value);
+    uint32_t read(uint32_t index);
+    void write(uint32_t index, uint32_t value);
 
 private:
     void drawTile(int tile, int tileX, int tileY, bool sprite);

@@ -2,10 +2,10 @@
 
     include "Sonic.asm"
 
-    def scl=$40168
-    def sda=$4016C
-    def scl_out=$401A8
-    def sda_out=$401AC
+    ifndef scl=$40168
+    ifndef sda=$4016C
+    ifndef scl_out=$401A8
+    ifndef sda_out=$401AC
 
 
 ; Starts an I2C write mode transmission to address r0
@@ -295,7 +295,7 @@ i2c_receive_byte:
     push r3
 
     ldr r0,0
-    ldr r3,8
+    ldr r2,8
 i2c_receive_byte_loop_:
     lsl r0,1
     ldr r3,1

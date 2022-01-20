@@ -29,10 +29,10 @@ public:
     void load(uint8_t *romData, long size);
     int run();
     void reset();
-    void updateTimers(int delta);
+    void fixedUpdate(int delta);
 
     uint8_t *getDisplayBuffer();
-    std::queue<uint8_t> &getAudioSamples();
+    void sampleAudio(float *buffer, int samples);
 
     std::string &getPrintBuffer();
     void uartReceive(char* bytes, uint8_t length);

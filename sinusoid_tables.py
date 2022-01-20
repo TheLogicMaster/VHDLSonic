@@ -2,17 +2,9 @@
 
 # Generates sinusoidal tables
 
+from header_generator import generate_header
+
 import math
-
-
-def generate_header(output, file):
-    with open(file, 'w') as f:
-        f.write(f"const unsigned char sin_table[{len(output)}] = {{\n\t")
-        for j in range(len(output)):
-            f.write(f"{output[j]:#0{4}x},")
-            if j % 16 == 15 and j < 255:
-                f.write("\n\t")
-        f.write("\n};\n")
 
 
 def main():
@@ -29,8 +21,8 @@ def main():
     with open("./programs/data/cos.bin", "wb") as f:
         f.write(cos_output)
 
-    generate_header(sin_output, './programs/data/sin.h')
-    generate_header(cos_output, './programs/data/cos.h')
+    generate_header(sin_output, open('./programs/data/sin.h', 'w'), 'SIN_TABLE')
+    generate_header(cos_output, open('./programs/data/cos.h', 'w'), 'COS_TABLE')
 
 
 if __name__ == '__main__':

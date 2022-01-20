@@ -56,7 +56,7 @@ int main() {
             continue;
 
         for (int i = 0; i < 241; i++)
-            fill[i] = (sin_table[(i + time) % 256] - 127) >> 2;
+            fill[i] = (SIN_TABLE[(i + time) % 256] - 127) >> 2;
         time += 2;
 
         filled = 1;

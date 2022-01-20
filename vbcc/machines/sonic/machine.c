@@ -100,16 +100,6 @@ static struct Typ ityp = {INT};
 // Suffixes for load and store instructions by byte count
 static char memory_suffixes[5] = {'?', 'b', 'w', '?', 'r'};
 
-// IO port definitions
-#define PORT_COUNT 35
-static char *port_names[PORT_COUNT] = {
-    "IE", "IF", "Random", 
-    "LEDs", "Seven_Segment", "GPIO", "GPIO_Modes", "Arduino", "Arduino_Modes", "Switches", "Buttons", "Serial", "Serial_Available", 
-    "Serial_Full", "UART_Enable", "ADC", "PWM_Enable", "PWM_Duty", "Timer_IE", "Timer_IF", "Timer_Repeat", "Timer_Count", "Timer_Prescale",
-    "Timer_Enable", "Timer_Compare",
-    "Render", "H_Scroll", "V_Scroll", "Window_X", "Window_Y", "Palette", "Tile_Data", "BG_Data", "Win_Data", "Sprites"
-};
-
 // Interrupts
 #define INTERRUPT_COUNT 8
 static char *interrupt_names[INTERRUPT_COUNT] = {
@@ -129,8 +119,12 @@ static struct Var *lastVarHeadVar;
 // Whether the last variable head has been created
 static int lastVarHeadCreated;
 
-// Whether the last compare insstruction was signed or not
+// Whether the last compare instruction was signed or not
 static int lastCompareSigned;
+
+// The last C line of code
+static char *lastCodeFile;
+static int lastCodeLine;
 
 // Linked list for storing variable initialization data
 static struct VariableInit {
@@ -139,6 +133,21 @@ static struct VariableInit {
     unsigned int value;
     struct VariableInit *next;
 } *variableInit;
+
+// Linked list for Assembly includes
+static struct Include {
+    char *path;
+    struct Include *next;
+} *includes;
+
+// Linked list for local variables for the current function
+static struct LocalVariable {
+    Var *var;
+    struct LocalVariable *next;
+} *localVariables;
+
+// The last function entered
+static char *lastFunction;
 
 #define ISCHAR(t) ((t&NQ)==CHAR)
 #define ISSHORT(t) ((t&NQ)==SHORT)
@@ -164,14 +173,6 @@ void ensure_section(FILE *f, int dataSection) {
     section = dataSection;
 }
 
-// Returns the index of a port if found otherwise -1
-int check_port(char *name) {
-    for (int i = 0; i < PORT_COUNT; i++)
-        if (!strcmp(name, port_names[i]))
-            return i;
-    return -1;
-}
-
 // Returns the id of an interrupt if name is valid
 unsigned int check_interrupts(char *name) {
     for (int i = 1; i < INTERRUPT_COUNT; i++)
@@ -189,56 +190,91 @@ void header(FILE *f) {
 
     emit(f, "; Generated VHDLSonic Assembly Program\n\n");
     emit(f, "; Interrupt vector jump table\n");
-    emit(f, "\tjmp __initialize\n");
+    emit(f, "\tjmp _initialize\n");
     for (int i = 1; i < INTERRUPT_COUNT; i++)
-        emit(f, "\tjmp _%s\n", interrupt_names[i]);
+        emit(f, "\tjmp %s\n", interrupt_names[i]);
     emit(f, "\n");
 
-    emit(f, "\tinclude \"../libraries/Sonic.asm\"\n");
-    emit(f, "\tinclude \"../libraries/Math.asm\"\n\n");
-
-    emit(f, "_reset:\n");
-    emit(f, "\tint 0\n\n");
-
-    emit(f, "_error:\n");
-    emit(f, "\tint 1\n");
-    emit(f, "\tret\n\n");
-
-    emit(f, "_sei:\n");
-    emit(f, "\tsei\n");
-    emit(f, "\tret\n\n");
-
-    emit(f, "_cli:\n");
-    emit(f, "\tcli\n");
-    emit(f, "\tret\n\n");
-
-    emit(f, "_memcpy:\n");
-    emit(f, "\tldr x,sp,-12\n");
-    emit(f, "\tldr y,sp,-8\n");
-    emit(f, "\tldr r0,sp,-16\n");
-    emit(f, "\tadd r0,x\n");
-    emit(f, "memcpy_loop_:\n");
-    emit(f, "\tldb r1,x++\n");
-    emit(f, "\tstb r1,y++\n");
-    emit(f, "\tcmp r0,x\n");
-    emit(f, "\tbne memcpy_loop_\n");
-    emit(f, "\tret\n\n");
+    emit(f, "\tinclude \"libraries/Sonic.asm\"\n");
+    emit(f, "\tinclude \"libraries/Math.asm\"\n\n");
 
     headerGen = 1;
 }
 
+void emit_var_info(FILE *f, Var *v) {
+    if (v->storage_class == STATIC)
+        emit(f, "label%d:", v->offset);
+    else
+        emit(f, "%s:", v->identifier);
+            
+    typfl t = v->vtyp->next ? v->vtyp->next->flags : v->vtyp->flags;
+    
+    switch (t & NQ) {
+        case CHAR:
+        case SHORT:
+        case INT:
+        case LONG:
+            emit(f, "%c%u", t & UNSIGNED ? 'u' : 'i', sizetab[t & NQ]);
+            break;
+        default:
+            emit(f, "?");
+            // printf("Unsupported debug symbol variable type: %i\n", t & NQ);
+            break;
+    }
+
+    switch (v->vtyp->flags & NQ) {
+        case ARRAY:
+            emit(f, "[%i]", v->vtyp->size);
+            break;
+        case POINTER:
+            emit(f, "*");
+            break;
+        default:
+            break;
+    }
+
+    emit(f, ":L%i@%s\n", v->line, v->filename);
+}
+
+// Emit comment for local variable if not recorded yet
+void record_local_variable(FILE *f, int size, Var *var) {
+    if (!var || !var->identifier || strlen(var->identifier) == 0)
+        return;
+    struct LocalVariable *variable = mymalloc(sizeof(struct LocalVariable));
+    variable->next = NULL;
+    variable->var = var;
+    if (localVariables) {
+        struct LocalVariable *last = localVariables;
+        while(last) {
+            if (!strcmp(last->var->identifier, var->identifier) && last->var->line == var->line)
+                return;
+            last = last->next;
+        }
+        last = localVariables;
+        while(last->next)
+            last = last->next;
+        last->next = variable;
+    } else
+        localVariables = variable;
+    emit(f, "; #LOCAL:%s:%i:", lastFunction, var->offset - (var->offset < 0 ? 8 - 2 * (4 - size) : 0));
+    emit_var_info(f, var);
+}
+
 // Load address of object into register
 void load_address(FILE *f, int size, int reg, obj o) {
+    if (o.flags & KONST) {
+        emit(f, "\tldr r%i,$%x\n", reg, o.val.vint);
+        return;
+    }
     if (o.v->storage_class == AUTO || o.v->storage_class == REGISTER) {
         emit(f, "\ttfr r%i,fp\n", reg);
         emit(f, "\tadd r%i,%i\n", reg, o.v->offset - (o.v->offset < 0 ? 8 - 2 * (4 - size) : 0) + o.val.vmax);
+        record_local_variable(f, size, o.v);
     } else {
         if (o.v->storage_class == STATIC)
             emit(f, "\tldr r%i,label%i\n", reg, o.v->offset);
-        else if (check_port(o.v->identifier) >= 0)
-            emit(f, "\tldr r%i,{%s}\n", reg, o.v->identifier);
         else
-            emit(f, "\tldr r%i,_%s\n", reg, o.v->identifier);
+            emit(f, "\tldr r%i,%s\n", reg, o.v->identifier);
         if (o.val.vmax)
             emit(f, "\tadd r%i,%i\n", reg, o.val.vint);
     }
@@ -249,9 +285,12 @@ void load_address(FILE *f, int size, int reg, obj o) {
 int get_param_reg(FILE *f, int size, int tempReg, obj q) {
     if (q.flags & REG && !(q.flags & DREFOBJ))
         return q.reg - 1;
-    if (q.flags & KONST)
-        emit(f, "\tldr r%i,$%x\n", tempReg, q.val.vuint);
-    else if (q.flags & VARADR)
+    if (q.flags & KONST) {
+        if (q.flags & DREFOBJ)
+            emit(f, "\tld%c r%i,[$%x]\n", memory_suffixes[size], tempReg, q.val.vuint);
+        else
+            emit(f, "\tldr r%i,$%x\n", tempReg, q.val.vuint);
+    } else if (q.flags & VARADR)
         load_address(f, size, tempReg, q);
     else if (q.flags & DREFOBJ || q.val.vmax) {
         if (q.flags & REG) {
@@ -264,17 +303,14 @@ int get_param_reg(FILE *f, int size, int tempReg, obj q) {
             emit(f, "\tldr r%i,r%i,0\n", tempReg, tempReg);
         emit(f, "\tld%c r%i,r%i,0\n", memory_suffixes[size], tempReg, tempReg);
     } else {
-        if (q.v->storage_class == AUTO || q.v->storage_class == REGISTER)
+        if (q.v->storage_class == AUTO || q.v->storage_class == REGISTER) {
             emit(f, "\tld%c r%i,fp,%i\n", memory_suffixes[size], tempReg,
                  q.v->offset - (q.v->offset < 0 ? 8 - 2 * (4 - size) : 0) + q.val.vmax);
-        else if (q.v->storage_class == STATIC)
+            record_local_variable(f, size, q.v);
+        } else if (q.v->storage_class == STATIC)
             emit(f, "\tld%c r%i,[label%i]\n", memory_suffixes[size], tempReg, q.v->offset);
-        else {
-            if (check_port(q.v->identifier) >= 0)
-                emit(f, "\tld%c r%i,[{%s}]\n", memory_suffixes[size], tempReg, q.v->identifier);
-            else
-                emit(f, "\tld%c r%i,[_%s]\n", memory_suffixes[size], tempReg, q.v->identifier);
-        }
+        else
+            emit(f, "\tld%c r%i,[%s]\n", memory_suffixes[size], tempReg, q.v->identifier);
     }
     return tempReg;
 }
@@ -283,6 +319,10 @@ int get_param_reg(FILE *f, int size, int tempReg, obj q) {
 // Stores a register into the object destination
 // Can't store from r0
 void store_reg(FILE *f, int size, int reg, obj z) {
+    if (z.flags & KONST) {
+        emit(f, "\tst%c r%i,[$%x]\n", memory_suffixes[size], reg, z.val.vuint);
+        return;
+    }
     if (z.flags & REG && !(z.flags & DREFOBJ)) {
         if (z.reg - 1 != reg)
             emit(f, "\ttfr r%i,r%i\n", z.reg - 1, reg);
@@ -301,17 +341,14 @@ void store_reg(FILE *f, int size, int reg, obj z) {
         emit(f, "\tst%c r%i,r0,0\n", memory_suffixes[size], reg);
         emit(f, "\tpop r0\n");
     } else {
-        if (z.v->storage_class == AUTO || z.v->storage_class == REGISTER)
+        if (z.v->storage_class == AUTO || z.v->storage_class == REGISTER) {
             emit(f, "\tst%c r%i,fp,%i\n", memory_suffixes[size], reg,
                  z.v->offset - (z.v->offset < 0 ? 8 - 2 * (4 - size) : 0) + z.val.vmax);
-        else if (z.v->storage_class == STATIC)
+            record_local_variable(f, size, z.v);
+        } else if (z.v->storage_class == STATIC)
             emit(f, "\tst%c r%i,[label%i]\n", memory_suffixes[size], reg, z.v->offset);
-        else {
-            if (check_port(z.v->identifier) >= 0)
-                emit(f, "\tst%c r%i,[{%s}]\n", memory_suffixes[size], reg, z.v->identifier);
-            else
-                emit(f, "\tst%c r%i,[_%s]\n", memory_suffixes[size], reg, z.v->identifier);
-        }
+        else
+            emit(f, "\tst%c r%i,[%s]\n", memory_suffixes[size], reg, z.v->identifier);
     }
 }
 
@@ -412,9 +449,13 @@ int init_cg(void) {
     tu_max[MAXINT] = t_max(UNSIGNED | LLONG);
 
     variableInit = NULL;
+    lastFunction = NULL;
+    includes = NULL;
     section = 0;
     headerGen = 0;
     lastCompareSigned = 0;
+    lastCodeLine = 0;
+    lastCodeFile = NULL;
 
     return 1;
 }
@@ -422,6 +463,30 @@ int init_cg(void) {
 /* If debug-information is requested, this functions is called after init_cg(), but
  * before any code is generated.*/
 void init_db(FILE *f) {
+}
+
+int handle_pragma(const char *s) {
+    char *path = mymalloc(strlen(s));
+    if (sscanf(s, "include \"%[^\"]\"", path)) {
+        struct Include *include = mymalloc(sizeof(struct Include));
+        include->next = NULL;
+        include->path = path;
+        if (includes) {
+            struct Include *last = includes;
+            while(last) {
+                if (!strcmp(last->path, path))
+                    return 0;
+                last = last->next;
+            }
+            last = includes;
+            while(last->next)
+                last = last->next;
+            last->next = include;
+        } else
+            includes = include;
+        return 1;
+    }
+    return 0;
 }
 
 /*  Returns the register in which variables of type t are returned. */
@@ -492,7 +557,7 @@ void gen_ds(FILE *f, zmax size, struct Typ *t) {
         }
         emit(f, "\n");
     } else
-        emit(f, "\tvar[%d]\n", size);
+        emit(f, " var[%d]\n\n", size);
 }
 
 /*  This function has to make sure the next data is     */
@@ -509,8 +574,10 @@ void gen_align(FILE *f, zmax align) {
 void gen_var_head(FILE *f, struct Var *v) {
     header(f);
 
-    if (ISFUNC(v->vtyp->flags) || (v->storage_class == EXTERN && check_port(v->identifier) >= 0))
+    if (ISFUNC(v->vtyp->flags) || (v->storage_class == EXTERN && !(v->flags & (DEFINED | TENTATIVE)))) {
+        lastVarHeadVar = NULL;
         return;
+    }
 
     lastVarHeadVar = v;
     lastVarHeadCreated = 0;
@@ -519,20 +586,18 @@ void gen_var_head(FILE *f, struct Var *v) {
 
     gen_align(f, falign(v->vtyp));
 
+    if (!is_const(v->vtyp)) {
+        emit(f, "; #VAR:");
+        emit_var_info(f, v);
+    }
+
     if (v->storage_class == STATIC)
         emit(f, "label%d:", v->offset);
     else if (v->storage_class == EXTERN)
-        emit(f, "_%s:", v->identifier);
+        emit(f, "%s:", v->identifier);
 
     if (v->clist && is_const(v->vtyp))
         emit(f, "\n");
-
-    // if (v->clist && !is_const(v->vtyp)) {
-    //     struct const_list *last = v->clist;
-    //     while (last->next)
-    //         last = last->next;
-    //     emit(f, "\tvar[%d]\n\n", last->idx + 1);
-    // }
 }
 
 /*  This function has to create static storage          */
@@ -540,11 +605,14 @@ void gen_var_head(FILE *f, struct Var *v) {
 void gen_dc(FILE *f, int typf, struct const_list *p) {
     header(f);
 
+    if (!lastVarHeadVar)
+        return;
+
     if (!lastVarHeadCreated && !is_const(lastVarHeadVar->vtyp)) {
         struct const_list *last = lastVarHeadVar->clist;
         while (last->next)
             last = last->next;
-        emit(f, "\tvar[%d]\n\n", (last->idx + 1) * sizetab[typf & NQ]);
+        emit(f, " var[%d]\n\n", (last->idx + 1) * sizetab[typf & NQ]);
         lastVarHeadCreated = 1;
     }
 
@@ -556,7 +624,7 @@ void gen_dc(FILE *f, int typf, struct const_list *p) {
         if (lastVarHeadVar->storage_class == STATIC)
             snprintf(variable, 65, "label%d", zm2zi(lastVarHeadVar->offset));
         else if (lastVarHeadVar->storage_class == EXTERN)
-            snprintf(variable, 65, "_%s", lastVarHeadVar->identifier);
+            snprintf(variable, 65, "%s", lastVarHeadVar->identifier);
         init->variable = variable;
         if (variableInit) {
             struct VariableInit *last = variableInit;
@@ -640,14 +708,22 @@ void gen_dc(FILE *f, int typf, struct const_list *p) {
  * of the function's stack frame.
  */
 void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
+    localVariables = NULL;
+    lastFunction = func->identifier;
+    
     header(f);
     ensure_section(f, 0);
 
+    stackframe += (4 - stackframe % 4) % 4; // Align stackframe
+
+    gen_align(f, 4);
+
     emit(f, "; Function \"%s\"\n", func->identifier);
     int interrupt = check_interrupts(func->identifier);
+    emit(f, "; #FUNC:%s:%i:L%i@%s\n", func->identifier, stackframe, func->dline, func->dfilename);
     if (interrupt)
-        emit(f, "__int%i:\n", interrupt);
-    emit(f, "_%s:\n", func->identifier);
+        emit(f, "_int%i:\n", interrupt);
+    emit(f, "%s:\n", func->identifier);
 
     // printf("%s\n", func->identifier);
     // printiclist(stdout, firstIC);
@@ -668,6 +744,10 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                 && ((ic->typf & NQ) == STRUCT || (ic->typf & NQ) == VOID || (ic->typf & NQ) == ARRAY || ((ic->typf & NQ) == CHAR && ic->q2.val.vmax != 1))) {
                 interruptRegisters[12] = 1;
                 interruptRegisters[13] = 1;
+            } else if (ic->code == CALL && (ic->q1.flags & VAR) && ic->q1.v->fi && ic->q1.v->fi->inline_asm) {
+                // Todo: Only save used registers using an annotation or something
+                for (int i = 0; i < 16; i++)
+                    interruptRegisters[i] = 1;
             }
         }
         for (int i = 0; i < 16; i++)
@@ -680,11 +760,19 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
     emit(f, "\ttfr fp,sp\n");
     emit(f, "\tadd sp,%i\n\n", zm2l(stackframe));
 
+    emit(f, "; #STARTCODE:%s\n", func->identifier);
+
     int pushed = 0, hasPushed = 0;
 
     ic = firstIC;
     for (; ic; ic = ic->next) {
         ensure_section(f, 0);
+
+        if ((ic->line != lastCodeLine || !lastCodeFile || strcmp(lastCodeFile, ic->file)) && ic->code != LABEL) {
+            emit(f, "; #CODE:%s:L%i@%s\n", func->identifier, ic->line, ic->file);
+            lastCodeFile = ic->file;
+            lastCodeLine = ic->line;
+        }
 
         int code = ic->code;
         int typf = ic->typf;
@@ -774,7 +862,7 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                     emit_ic_comment(f, ic);
 
                     if (!hasPushed)
-                        emit(f, "\tadd sp,%i\n", pushedargsize(get_next_call(ic)) + 4 - stackframe % 4);
+                        emit(f, "\tadd sp,%i\n", pushedargsize(get_next_call(ic)));
                     hasPushed = 1;
 
                     int offset;
@@ -1006,26 +1094,34 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
                 break;
 
             case CALL: /* Call function */
-                if ((ic->q1.flags & VAR) && ic->q1.v->fi && ic->q1.v->fi->inline_asm) {
-                    emit(f, "; Inline ASM:\n");
-                    emit_inline_asm(f, ic->q1.v->fi->inline_asm);
-                    emit(f, "\n");
-                } else {
-                    emit_ic_comment(f, ic);
-                    if (!hasPushed)
-                        emit(f, "\tadd sp,%i\n", 4 - stackframe % 4);
+                {
+                    int inlineASM = (ic->q1.flags & VAR) && ic->q1.v->fi && ic->q1.v->fi->inline_asm;
+                    
+                    if (inlineASM)
+                        emit(f, "; Inline ASM:\n");
+                    else
+                        emit_ic_comment(f, ic);
+                    
                     pushed = 0;
                     hasPushed = 0;
-                    if (ic->q1.flags & DREFOBJ) {
-                        ic->q1.flags &= ~DREFOBJ; // Hack to support function pointers
-                        int newLabel = ++label;
-                        emit(f, "\tldr r0,label%d\n", newLabel);
-                        emit(f, "\tpush r0\n");
-                        emit(f, "\tjmp r%d\n", get_param_reg(f, 4, 0, ic->q1));
-                        emit(f, "label%d:\n", newLabel);
-                    } else
-                        emit(f, "\tjsr _%s\n", ic->q1.v->identifier);
-                    emit(f, "\tsub sp,%i\n", pushedargsize(ic) + 4 - stackframe % 4);
+                    if (inlineASM)
+                        emit_inline_asm(f, ic->q1.v->fi->inline_asm);
+                    else {
+                        if (ic->q1.flags & DREFOBJ) {
+                            ic->q1.flags &= ~DREFOBJ; // Hack to support function pointers
+                            int newLabel = ++label;
+                            emit(f, "\tldr r0,label%d\n", newLabel);
+                            emit(f, "\tpush r0\n");
+                            emit(f, "\tjmp r%d\n", get_param_reg(f, 4, 0, ic->q1));
+                            emit(f, "label%d:\n", newLabel);
+                        } else
+                            emit(f, "\tjsr %s\n", ic->q1.v->identifier);
+                    }
+
+                    if (pushedargsize(ic))
+                        emit(f, "\tsub sp,%i\n\n", pushedargsize(ic));
+                    else
+                        emit(f, "\n");
                 }
                 break;
 
@@ -1038,6 +1134,7 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
     }
 
     emit(f, "; Return from function \"%s\"\n", func->identifier);
+    emit(f, "; #ENDCODE:%s\n", func->identifier);
 
     emit(f, "\tsub sp,%i\n", zm2l(stackframe));
 
@@ -1051,6 +1148,8 @@ void gen_code(FILE *f, struct IC *firstIC, struct Var *func, zmax stackframe) {
 
     emit(f, "; Restore FP\n");
     emit(f, "\tpop fp\n");
+    
+    emit(f, "; #RETURN:%s\n", func->identifier);
 
     if (!strcmp(func->identifier, "main"))
         emit(f, "\thalt\n\n");
@@ -1074,15 +1173,23 @@ void cleanup_cg(FILE *f) {
 
     ensure_section(f, 0);
 
-    emit(f, "__initialize:\n");
+    emit(f, "; C includes\n");
+    struct Include *include = includes;
+    while (include) {
+        emit(f, "\tinclude \"%s\"\n", include->path);
+        include = include->next;
+    }
+    emit(f, "\n");
+
+    emit(f, "_initialize:\n");
 
     // emit(f, "; Clear memory\n");
     // emit(f, "\tldr x,$10000\n");
     // emit(f, "\tldb r0,0\n");
-    // emit(f, "__clear_mem_loop:\n");
+    // emit(f, "_clear_mem_loop:\n");
     // emit(f, "\tstr r0,x++\n");
     // emit(f, "\tcmp x,$20000\n");
-    // emit(f, "\tbne __clear_mem_loop\n\n");
+    // emit(f, "\tbne _clear_mem_loop\n\n");
 
     emit(f, "; Static variable initialization\n");
     char *previousVariable = NULL;
@@ -1096,10 +1203,10 @@ void cleanup_cg(FILE *f) {
                 size++;
             }
             if (size == 1) {
-                emit(f, "\tld%c r0,%s__init\n", memory_suffixes[init->size], init->variable);
+                emit(f, "\tld%c r0,%s_init\n", memory_suffixes[init->size], init->variable);
                 emit(f, "\tst%c r0,%s\n", memory_suffixes[init->size], init->variable);
             } else {
-                emit(f, "\tldr x,%s__init\n", init->variable);
+                emit(f, "\tldr x,%s_init\n", init->variable);
                 emit(f, "\tldr y,%s\n", init->variable);
                 output_memcpy(f, 12, 13, size);
             }
@@ -1109,8 +1216,8 @@ void cleanup_cg(FILE *f) {
     }
 
     emit(f, "; Run main function\n");
-    emit(f, "\tldr sp,__stack\n");
-    emit(f, "\tjmp _main\n\n");
+    emit(f, "\tldr sp,_stack\n");
+    emit(f, "\tjmp main\n\n");
 
     emit(f, "; Static variable initialization data\n");
     previousVariable = NULL;
@@ -1120,7 +1227,7 @@ void cleanup_cg(FILE *f) {
             if (previousVariable)
                 emit(f, "\n");
             gen_align(f, init->size);
-            emit(f, "%s__init:\n", init->variable);
+            emit(f, "%s_init:\n", init->variable);
         }
         emit(f, "\td%c $%x\n", init->size == 1 ? 'b' : (init->size == 2 ? 'w' : 'd'), init->value);
         previousVariable = init->variable;
@@ -1131,12 +1238,12 @@ void cleanup_cg(FILE *f) {
     emit(f, "; Unused interrupt vectors\n");
     for (int i = 1; i < INTERRUPT_COUNT; i++)
         if (!interrupts[i])
-            emit(f, "_%s:\n", interrupt_names[i]);
+            emit(f, "%s:\n", interrupt_names[i]);
     emit(f, "\tbra -8\n\n");
 
     ensure_section(f, 1);
     emit(f, "\talign 4\n");
-    emit(f, "__stack:\n");
+    emit(f, "_stack:\n");
 }
 
 void cleanup_db(FILE *f) {

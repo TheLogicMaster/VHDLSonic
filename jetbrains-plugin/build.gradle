@@ -18,8 +18,8 @@ sourceSets.main.java.srcDirs 'src/main/gen'
 // See https://github.com/JetBrains/gradle-intellij-plugin/
 intellij {
   //type = 'PC' // Uncomment to use PyCharm for runIde task
-  version = '2021.2'
-  plugins = ['PythonCore:212.4746.13', 'PsiViewer:212-SNAPSHOT']
+  version = '2021.3'
+  plugins = ['PythonCore:213.5744.248', 'PsiViewer:213-SNAPSHOT']
 }
 
 buildSearchableOptions {

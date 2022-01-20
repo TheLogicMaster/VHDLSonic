@@ -1,4 +1,5 @@
-; Music Player
+; A simple single track music player
+; Drives a passive piezo buzzer on the configured Arduino pin and the APU
 ; https://github.com/robsoncouto/arduino-songs
 
     jmp main
@@ -13,7 +14,7 @@
     include "libraries/Sonic.asm"
     include "libraries/Math.asm"
 
-    def buzzer_offset=16 ; Arduino pin 4
+    def buzzer_offset=60 ; Arduino pin 15
 
 main:
     ldr sp,stack ; Initialize stack
@@ -30,7 +31,7 @@ main:
 
 ; Setup note period timer
     ldr r1,4
-    ldr r0,25
+    ldr r0,1136
     str r0,r1,{timer_prescale}
 
 ; Setup note pause period timer
@@ -90,6 +91,7 @@ play_song:
     add r3,r2
     add r3,4
     ldr r3,r3,0
+    add r3,6
 
 ; Initialize buzzer toggle register
     ldr r2,0
@@ -105,6 +107,11 @@ play_song_loop:
     beq play_song_done
     str r5,r1,{timer_compare}
     ldw r4,r3++
+
+    or r4,$70000
+    str r4,{audio_channel_0}
+    and r4,$FFFF
+
 play_song_note:
 
 ; Wait for one period of note
@@ -133,6 +140,9 @@ play_song_tone:
     bne play_song_note
 
 ; Wait for 1/10th of note duration to add note separation
+    ldr r4,0
+    str r4,{audio_channel_0}
+
     ldr r1,8
     ldr r0,0
     str r0,r1,{timer_count}
@@ -146,6 +156,8 @@ play_song_pause:
     bra play_song_loop
 
 play_song_done:
+    ldr r4,0
+    str r4,{audio_channel_0}
 
     pop r5
     pop r4

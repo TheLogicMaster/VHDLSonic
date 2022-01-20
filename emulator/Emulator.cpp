@@ -24,7 +24,7 @@ int Emulator::run() {
         return 0;
     }
 
-    interruptFlags |= gpu.update() | apu.update();
+    interruptFlags |= gpu.update();
 
     if ((status & FLAG_I && interruptFlags & interruptEnable) || interruptFlags & 2) {
         uint8_t interrupt;
@@ -352,7 +352,9 @@ void Emulator::reset() {
     apu.reset();
 }
 
-void Emulator::updateTimers(int delta) {
+void Emulator::fixedUpdate(int delta) {
+    apu.update(delta);
+
     for (int i = 0; i < 8; i++) {
         auto &timer = timers[i];
 
@@ -378,8 +380,8 @@ uint8_t *Emulator::getDisplayBuffer() {
     return gpu.getDisplayBuffer();
 }
 
-std::queue<uint8_t> &Emulator::getAudioSamples() {
-    return apu.getSamples();
+void Emulator::sampleAudio(float *buffer, int samples) {
+    apu.sample(buffer, samples);
 }
 
 std::string &Emulator::getPrintBuffer() {
@@ -619,6 +621,8 @@ uint32_t Emulator::readUint32(uint32_t address) {
             return gpu.read((address - 0x30000) / 4);
         case 0x40000 ... 0x4FFFF:
             return readMicrocontroller((address - 0x40000) / 4);
+        case 0x50000 ... 0x5FFFF:
+            return apu.read((address - 0x50000) / 4);
         default:
             return 0;
     }
@@ -643,6 +647,9 @@ void Emulator::writeUint32(uint32_t address, uint32_t value) {
             break;
         case 0x40000 ... 0x4FFFF:
             writeMicrocontroller((address - 0x40000) / 4, value);
+            break;
+        case 0x50000 ... 0x5FFFF:
+            apu.write((address - 0x50000) / 4, value);
             break;
         default:
             break;

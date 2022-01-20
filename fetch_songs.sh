@@ -14,7 +14,7 @@ for f in ./arduino-songs/*/*.ino
 do
     echo "Converting: $f"
     filename=${f##*/}
-    cat "$f" | python3 "${SCRIPT_DIR}/song_converter.py" "${SCRIPT_DIR}/programs/data/songs/${filename%.*}.bin"
+    python3 "${SCRIPT_DIR}/song_converter.py" -m arduino $f "${SCRIPT_DIR}/programs/data/songs/${filename%.*}.bin"
 done
 
 rm -rf ./arduino-songs

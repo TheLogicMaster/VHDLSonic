@@ -3,6 +3,7 @@
 # This script will assemble a program into the build folder
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -24,6 +25,8 @@ last_data_label = None
 label_addresses = {}
 label_jumps = {}
 data_section = False
+c_functions = {}
+c_variables = {}
 
 
 # Print error and current line number before exiting
@@ -288,6 +291,65 @@ def output_branch_instr(params, opcode):
     address += 4
 
 
+# Parse a comment for C debug symbols
+def parse_comment(comment):
+    comment_parts = comment.split(":")
+    location = comment_parts[-1].split("@")
+    line = 0
+    source = ""
+    if comment_parts[0] in ["#FUNC", "#CODE", "#VAR", "#LOCAL"]:
+        line = int(location[0][1:])
+        source = location[1].replace("./build/", "")
+    if comment_parts[0] == "#FUNC":
+        c_functions[comment_parts[1]] = {
+            "line": line,
+            "frame": int(comment_parts[2]),
+            "source": source,
+            "address": address,
+            "code": [],
+            "locals": []
+        }
+    elif comment_parts[0] == "#CODE":
+        if len(c_functions[comment_parts[1]]["code"]) > 0:
+            c_functions[comment_parts[1]]["code"][-1]["end"] = address
+        c_functions[comment_parts[1]]["code"].append({
+            "line": line,
+            "source": source,
+            "address": address
+        })
+    elif comment_parts[0] == "#RETURN":
+        c_functions[comment_parts[1]]["end"] = address
+    elif comment_parts[0] == "#STARTCODE":
+        c_functions[comment_parts[1]]["start_code"] = address
+    elif comment_parts[0] == "#ENDCODE":
+        c_functions[comment_parts[1]]["end_code"] = address
+        if len(c_functions[comment_parts[1]]["code"]) > 0:
+            c_functions[comment_parts[1]]["code"][-1]["end"] = address
+    elif comment_parts[0] == "#VAR" or comment_parts[0] == "#LOCAL":
+        func = None
+        offset = None
+        if comment_parts[0] == "#LOCAL":
+            offset = int(comment_parts[2])
+            comment_parts.pop(2)
+            func = comment_parts[1]
+            comment_parts.pop(1)
+        type_str = comment_parts[2].split("[")[0].replace("*", "")
+        var = {
+            "line": line,
+            "source": source,
+            "address": data_address if comment_parts[0] == "#VAR" else offset,
+            "type": type_str[0],
+            "type_size": 0 if type_str[0] not in ['u', 'i'] else int(type_str[1:]),
+            "pointer": "*" in comment_parts[2],
+            "array": int(comment_parts[2].split("[")[1][:-1]) if "[" in comment_parts[2] else 0
+        }
+        if comment_parts[0] == "#VAR":
+            c_variables[comment_parts[1]] = var
+        else:
+            var["name"] = comment_parts[1]
+            c_functions[func]["locals"].append(var)
+
+
 def parse_file():
     global line_number
     global address
@@ -309,8 +371,11 @@ def parse_file():
 
         # Todo: Fix splitting to avoid marking semicolons in strings as comments
 
-        # Remove comments
-        line = line.split(";")[0]
+        # Handle comments
+        line_parts = line.split(";", 1)
+        line = line_parts[0]
+        if len(line_parts) > 1:
+            parse_comment(line_parts[1].strip())
 
         # Get label
         match = re.search(r"^\s*(\w+):", line.lower())
@@ -345,8 +410,8 @@ def parse_file():
                     params[i] = params[i].replace("{" + constant + "}", ("" if type(constants[constant]) is str else "#") + str(constants[constant]))
             params[i] = re.sub(r"^\s+|\s+$", "", params[i])
 
-        if data_section and instr != "var" and instr != "org" and instr != "rodata" and instr != "align":
-            error("Only VAR, ORG, ALIGN, and RODATA are permitted in the data section")
+        if data_section and instr not in ['var', 'org', 'data', 'rodata', 'align', 'def', 'label']:
+            error(f"'{instr.upper()}' is not allowed in the data section")
 
         if instr == "org":
             ensure_params(params, 1)
@@ -373,6 +438,24 @@ def parse_file():
             if not match:
                 error("Invalid definition")
             constants[match[1]] = match[2]
+
+        elif instr == "label":
+            ensure_params(params, 1)
+            match = re.search(r"^(\w+)=(.+)$", params[0])
+            if not match:
+                error("Invalid label definition")
+            parsed = parse_constant(match[2])
+            if parsed is None:
+                error("Invalid label address")
+            labels[match[1]] = parsed
+
+        elif instr == "ifndef":
+            ensure_params(params, 1)
+            match = re.search(r"^(\w+)=(.+)$", params[0])
+            if not match:
+                error("Invalid definition")
+            if match[1] not in constants:
+                constants[match[1]] = match[2]
 
         elif instr == "include":
             current_line = line_number
@@ -640,7 +723,7 @@ def parse_file():
 
 
 def main():
-    global file
+    global file, output, address, data_address
 
     parser = argparse.ArgumentParser(description='Assemble a program. Assumed to be in the <project>/programs directory by default')
     parser.add_argument('program', help='The program file to assemble')
@@ -650,6 +733,7 @@ def main():
     parser.add_argument('-e', '--emulator', help='The path to the emulator if not "../emulator/build/Emulator"')
     parser.add_argument('-c', '--compiler', help='The path to the compiler if not "../vbcc/bin/vbccsonic"')
     parser.add_argument('-m', '--memory', action='store_true', help='Assemble for being run by bootloader')
+    parser.add_argument('-d', '--debug', action='store_true', help='Generate debug symbols')
     args = parser.parse_args()
 
     memory = args.memory
@@ -675,7 +759,114 @@ def main():
         shutil.copytree('./libraries', './build/libraries')
         file = assembly
 
+    # Setup in-memory program
+    if memory:
+        temp_file = file
+        file = os.path.join(os.path.dirname(file), 'libraries/Kernel.asm')
+        parse_file()
+        file = temp_file
+        address = 0x18000
+        data_address = 0x1F000 + 128  # Allocate 128 bytes for library variables
+
     parse_file()
+
+    # Generate debug symbols
+    debug_path = os.path.splitext(os.path.basename(args.program))[0] + ".debug"
+    if args.debug:
+        program_labels = {}
+        data_labels = {}
+        mapped_labels = {}
+
+        for label in labels:
+            if labels[label] < 0x18000:
+                program_labels[label] = labels[label]
+            elif labels[label] < 0x20000:
+                data_labels[label] = labels[label]
+            else:
+                mapped_labels[label] = labels[label]
+
+        # Todo: Add check for single line if statements, either as a post-processing check or a flag during parsing
+        if args.type == 'c':
+            for name in c_functions:
+                func = c_functions[name]
+                tree = {
+                    "parent": None,
+                    "children": [],
+                    "start": func["line"],
+                    "end": None
+                }
+                current_branch = tree
+                scopes = []
+                lines = open(func["source"]).readlines()
+                block_comment = False
+                for_loop = None
+                for i in range(len(lines)):
+                    if i < func["line"]:
+                        continue
+                    function_end = False
+                    j = -1
+                    while j + 1 < len(lines[i]):
+                        j += 1
+                        char = lines[i][j]
+                        remaining = lines[i][j:]
+                        if remaining.startswith("//") and not block_comment:
+                            break
+                        elif remaining.startswith("/*"):
+                            block_comment = True
+                            j += 1
+                        elif remaining.startswith("*/"):
+                            block_comment = False
+                            j += 1
+                        if block_comment:
+                            continue
+                        if match := re.match(r"for\W*\(.+\)", remaining):
+                            j += len(match[0]) - 1
+                            for_loop = i + 1
+                        if for_loop:
+                            if char != '{':
+                                if char == ';':
+                                    scopes.append({
+                                        "parent": current_branch,
+                                        "children": [],
+                                        "start": for_loop,
+                                        "end": i + 1
+                                    })
+                                    for_loop = None
+                                continue
+                        if char == '{':
+                            branch = {
+                                "parent": current_branch,
+                                "children": [],
+                                "start": i + 1,
+                                "end": None
+                            }
+                            current_branch["children"].append(branch)
+                            current_branch = branch
+                        elif char == '}':
+                            current_branch["end"] = i + 1
+                            scopes.append(current_branch)
+                            if current_branch["parent"] is None:
+                                function_end = True
+                                break
+                            current_branch = current_branch["parent"]
+                    if function_end:
+                        break
+                for var in func["locals"]:
+                    var["start"] = tree["start"]
+                    var["end"] = tree["end"]
+                    for scope in scopes:
+                        if scope["end"] - scope["start"] < var["end"] - var["start"] and scope["start"] <= var["line"] <= scope["end"]:
+                            var["start"] = scope["start"]
+                            var["end"] = scope["end"]
+
+        with open(os.path.join("./build", debug_path), "w") as f:
+            json.dump({
+                "functions": c_functions,
+                "variables": c_variables,
+                "program_labels": program_labels,
+                "data_labels": data_labels,
+                "mapped_labels": mapped_labels
+            }, f, indent=4)
 
     # Substitute labels for addresses
     for addr in label_addresses:
@@ -683,11 +874,6 @@ def main():
         if label not in labels:
             error("No such label: " + label, -1)
         offset = 0
-        if memory:
-            if labels[label] < 0x18000:
-                offset = 0x18000
-            else:
-                offset = 0x1E000
         write_word_in_output(addr, labels[label] + offset)
 
     # Substitute labels for relative jumps
@@ -700,13 +886,20 @@ def main():
 
     # Ensure ROM size
     # Todo: Verify allocated RAM size
+    size = len(output)
     if memory:
-        ensure_output_size(0x6000)
-        if address > 0x6000:
+        print(f'Program size: {round((size - 0x18000) / 1024, 2)}/28 KB')
+        if size > 0x20000:
             error("In-memory program size exceeded", -1)
     else:
-        if address > 0x18000:
+        print(f'Program size: {round(size / 1024, 2)}/96 KB')
+        if size > 0x18000:
             error("Program size exceeded", -1)
+
+    # Pad produced image for in-memory programs
+    if memory:
+        output = output[0x18000:]
+        ensure_output_size(0x7000)
 
     # Save machine code results
     rom_name = os.path.splitext(os.path.basename(args.program))[0] + (".img" if memory else ".bin")
@@ -725,7 +918,8 @@ def main():
     # Run emulator if needed
     if args.run:
         os.chdir('./build')
-        cmd = f"\"{args.emulator if args.emulator else os.path.join(os.pardir, os.pardir, 'emulator/build/Emulator')}\" \"{rom_name}\""
+        debug = f'-d "{debug_path}"' if args.debug else ""
+        cmd = f"\"{args.emulator if args.emulator else os.path.join(os.pardir, os.pardir, 'emulator/build/Emulator')}\" -r \"{rom_name}\" {debug}"
         subprocess.run(shlex.split(cmd))
 
 

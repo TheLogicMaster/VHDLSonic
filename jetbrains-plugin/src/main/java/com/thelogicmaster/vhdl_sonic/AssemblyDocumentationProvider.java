@@ -108,7 +108,7 @@ public class AssemblyDocumentationProvider extends AbstractDocumentationProvider
 
 		if (contextElement.getNode().getElementType() == AssemblyTypes.MNEMONIC)
 			return new AssemblyDocumentationElement(contextElement, generateInstructionDoc(contextElement));
-		else if (contextElement.getNode().getElementType() == AssemblyTypes.CONSTANT && Pattern.matches("\\{\\w+}", contextElement.getText()))
+		else if (contextElement.getNode().getElementType() == AssemblyTypes.CONSTANT && Pattern.matches(".*\\{\\w+}.*", contextElement.getText()))
 			return new AssemblyDocumentationElement(contextElement, generateConstantDoc(contextElement));
 		return null;
 	}

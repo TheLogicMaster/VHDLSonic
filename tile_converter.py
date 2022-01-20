@@ -63,7 +63,7 @@ with open(os.path.splitext(sys.argv[1])[0] + ".bin", "wb") as f:
 with open(os.path.splitext(sys.argv[1])[0] + ".h", "w") as f:
     file_name = os.path.basename(sys.argv[1])
     f.write(f"// {file_name}\n\n")
-    f.write(f"const int {os.path.splitext(file_name)[0]}[{int(len(output) / 4)}] = {{\n")
+    f.write(f"const int {os.path.splitext(file_name)[0].upper()}[{int(len(output) / 4)}] = {{\n")
     for tile in range(int(len(output) / 32)):
         f.write("\t")
         for row in range(8):

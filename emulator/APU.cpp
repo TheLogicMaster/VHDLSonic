@@ -4,52 +4,67 @@ APU::APU() {
     reset();
 }
 
-int APU::update() {
-    if (ticks++ < 20)
-        return 0;
+void APU::sample(float *buffer, int samples) {
+    for (int i = 0; i < samples; i++) {
+        float mixed = 0;
 
-    ticks = 0;
+        for (auto &squareChannel : squareChannels) {
+            if (squareChannel.period == 0 or (squareChannel.finite and squareChannel.duration == 0))
+                continue;
 
-    uint8_t wave1Sample = 0;
+            squareChannel.ticks++;
+            if (squareChannel.ticks >= squareChannel.period) {
+                squareChannel.ticks = 0;
+                squareChannel.state = !squareChannel.state;
+            }
 
-    if (square1Freq and (square1Repeat or square1State < square1Length * 50001 / 1000)) {
-        uint32_t period = (50001 / square1Freq);
-        uint32_t constrained = square1State % period;
-//        int volumeOffset = square1VolumeSpeed ? square1State * square1VolumeSpeed * 255 / (50001) : 0;
-//        uint8_t volume = std::max(0, std::min(0xFF, square1VolumeInc
-//            ? square1VolumeInit + volumeOffset : square1VolumeInit - volumeOffset));
-        uint8_t volume = 0xFF;
-        wave1Sample = constrained > period * WAVE_DUTY[square1Duty] / 16 ? 0 : volume;
-        square1State++;
+            mixed += (float)squareChannel.volume / 7 * (squareChannel.state ? -1.f : 1.f);
+        }
+
+        buffer[i] = mixed / SQUARE_CHANNELS;
     }
+}
 
-    samples.push(wave1Sample);
+void APU::update(int delta) {
+    ticks += delta;
+    if (ticks >= 1000) {
+        ticks = 0;
 
-    return 0;
+        for (auto &squareChannel : squareChannels)
+            if (squareChannel.duration > 0)
+                squareChannel.duration--;
+    }
 }
 
 void APU::reset() {
-    std::queue<uint8_t>().swap(samples);
     ticks = 0;
 
-//    square1State = 0;
-//    square1Freq = 100;
-//    square1Duty = 3;
-//    square1Length = 1000;
-//    square1Repeat = true;
-//    square1VolumeInit = 255;
-//    square1VolumeInc = false;
-//    square1VolumeSpeed = 1;
+    for (auto &squareChannel : squareChannels)
+        squareChannel = {};
 }
 
-std::queue<uint8_t> &APU::getSamples() {
-    return samples;
+uint32_t APU::read(uint32_t index) {
+    switch (index) {
+        case 0 ... SQUARE_CHANNELS: {
+            auto const &channel = squareChannels[index];
+            return channel.finite << 31 | channel.duration << 19 | channel.volume << 16 | channel.period;
+        }
+        default:
+            return 0;
+    }
 }
 
-uint32_t APU::read(uint32_t address) {
-    return 0;
-}
-
-void APU::write(uint32_t address, uint32_t value) {
-
+void APU::write(uint32_t index, uint32_t value) {
+    switch (index) {
+        case 0 ... SQUARE_CHANNELS:
+            squareChannels[index] = {
+                 (uint16_t)(value & 0x0000FFFF),
+                 (uint8_t)((value & 0x00070000) >> 16),
+                 (uint16_t)((value & 0x7FF80000) >> 19),
+                 (bool)(value & 0x80000000)
+            };
+            break;
+        default:
+            break;
+    }
 }
