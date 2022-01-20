@@ -290,10 +290,15 @@ static bool loadDebugSymbols(const std::string &path) {
         files.emplace(function.second.source);
     for (const auto &variable: debugVariables)
         files.emplace(variable.second.source);
+    std::string parent;
+    for (auto i = path.size() - 1; i > 0; i--) {
+        if (path[i] == '/' or path[i] == '\\') {
+            parent = path.substr(0, i + 1);
+            break;
+        }
+    }
     for (const auto &file: files) {
-        std::filesystem::path filePath(path);
-        filePath = filePath.parent_path();
-        filePath /= file;
+        std::string filePath = parent + file;
         std::ifstream source(filePath);
         if (!source.good()) {
             std::cout << "Failed to open: \"" << filePath << "\"" << std::endl;

@@ -60,11 +60,10 @@ jobs:
           cp ./emulator/build/Emulator ./Emulator/Emulator
           cp ./vbcc/bin/vbccsonic ./Emulator
           cp ./programs/build/*.bin ./Emulator
-          cp ./assembler.py ./Emulator
-          cp ./image_convert.py ./Emulator
+          cp ./*.py ./Emulator
 
       - name: Zip Linux Release
-        uses: papeloto/action-zip@v1
+        uses: vimtor/action-zip@v1
         with:
           files: ./Emulator
           dest: linux-${{ steps.get_version.outputs.VERSION }}.zip
@@ -77,7 +76,7 @@ jobs:
           cp ./programs/build/*.bin ./Emulator
 
       - name: Zip HTML Release
-        uses: papeloto/action-zip@v1
+        uses: vimtor/action-zip@v1
         with:
           files: ./Emulator
           dest: html-${{ steps.get_version.outputs.VERSION }}.zip
@@ -173,11 +172,10 @@ jobs:
           cp emulator/build/*.dll ./build
           cp vbcc/bin/vbccsonic ./build
           cp programs/build/*.bin ./build
-          cp assembler.py ./build
-          cp image_convert.py ./build
+          cp *.py ./build
 
       - name: Zip Windows Release
-        uses: papeloto/action-zip@v1
+        uses: vimtor/action-zip@v1
         with:
           files: ./build
           dest: windows-${{ steps.get_version.outputs.VERSION }}.zip
