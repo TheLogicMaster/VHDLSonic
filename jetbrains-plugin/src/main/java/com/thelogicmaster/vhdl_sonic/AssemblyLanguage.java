@@ -15,6 +15,7 @@ import com.thelogicmaster.vhdl_sonic.psi.AssemblyInstructionElement;
 import com.thelogicmaster.vhdl_sonic.psi.AssemblyLabelDefinition;
 import com.thelogicmaster.vhdl_sonic.psi.AssemblyTypes;
 
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -446,12 +447,12 @@ public class AssemblyLanguage extends Language {
 				if (include == null)
 					continue;
 				String includeText = include.getText().replace("\"", "");
-				String includePath = Paths.get(file.getVirtualFile().getParent().getPath(), includeText).toAbsolutePath().toString();
-				if (!includes.add(includePath))
+				Path includePath = Paths.get(file.getVirtualFile().getParent().getPath(), includeText).toAbsolutePath();
+				if (!includes.add(includePath.toString()))
 					continue;
 
 				for (AssemblyFile assemblyFile : getProjectFiles(file.getProject()))
-					if (includePath.equals(assemblyFile.getVirtualFile().getPath()))
+					if (includePath.equals(Paths.get(assemblyFile.getVirtualFile().getPath())))
 						collectVisibleLabels(assemblyFile, definitions, collected, duplicates, includes, depth + 1);
 			}
 	}

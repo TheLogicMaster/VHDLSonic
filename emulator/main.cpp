@@ -858,7 +858,7 @@ static void insertTableVariable(const std::string &name, const DebugVariable &va
 int getCurrentLine(uint32_t pc, std::string &currentSource) {
     int currentLine = 0;
     for (const auto &function : debugFunctions) {
-        if (pc < function.second.code[0].address)
+        if (function.second.code.empty() or pc < function.second.code[0].address)
             continue;
         for (int i = 0; i < function.second.code.size(); i++) {
             if (i < function.second.code.size() - 1) {
@@ -925,13 +925,14 @@ static void displayFunctions() {
     if (windowStates[WINDOW_FUNCTIONS]) {
         ImGui::Begin(WINDOW_FUNCTIONS, &windowStates[WINDOW_FUNCTIONS]);
 
-        ImGui::BeginChild("FunctionView", ImVec2(ImGui::GetWindowWidth() - 10,ImGui::GetWindowHeight() - 60), true,ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::BeginChild("FunctionView", ImVec2(ImGui::GetWindowWidth() - 5,ImGui::GetWindowHeight() - 60), true,ImGuiWindowFlags_HorizontalScrollbar);
         if (!debugFiles.empty() and ImGui::BeginTabBar("FunctionTabView")) {
             for (const auto &file: debugFiles) {
                 int flags = ImGuiTabItemFlags_None;
                 if (functionsJumpToPC and currentSource == file.first)
                     flags |= ImGuiTabItemFlags_SetSelected;
                 if (ImGui::BeginTabItem(file.first.c_str(), nullptr, flags)) {
+                    ImGui::BeginChild("FunctionView", ImVec2(ImGui::GetWindowWidth() - 20,ImGui::GetWindowHeight() - 40), true,ImGuiWindowFlags_HorizontalScrollbar);
                     int lineNumber = 1;
                     for (const auto &line: file.second) {
                         bool isStatement = false;
@@ -978,6 +979,7 @@ static void displayFunctions() {
 
                         lineNumber++;
                     }
+                    ImGui::EndChild();
                     ImGui::EndTabItem();
                 }
             }

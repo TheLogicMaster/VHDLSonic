@@ -299,7 +299,7 @@ def parse_comment(comment):
     source = ""
     if comment_parts[0] in ["#FUNC", "#CODE", "#VAR", "#LOCAL"]:
         line = int(location[0][1:])
-        source = location[1].replace("./build/", "")
+        source = location[1].replace("\\", "/").replace("./build/", "")
     if comment_parts[0] == "#FUNC":
         c_functions[comment_parts[1]] = {
             "line": line,
