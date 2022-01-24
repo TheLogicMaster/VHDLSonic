@@ -203,9 +203,9 @@ begin
 	--			vblank => ,
 	--			hblank => ,
 				lcd_data => lcd_data,
-				lcd_write => ARDUINO_IO(11),
-				lcd_command => ARDUINO_IO(12),
-				lcd_enable => ARDUINO_IO(13)
+				lcd_write => ARDUINO_IO(1),
+				lcd_command => ARDUINO_IO(14),
+				lcd_enable => ARDUINO_IO(15)
 			);
 	else generate
 		vga : vga_driver

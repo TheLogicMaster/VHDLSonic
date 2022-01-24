@@ -46,7 +46,7 @@ entity computer is
 end entity;
 
 architecture impl of computer is
-	constant USE_LCD : boolean := false;
+	constant USE_LCD : boolean := true;
 	constant USE_APU : boolean := true;
 
 	component cpu is
@@ -194,6 +194,7 @@ architecture impl of computer is
 	end component;
 	
 	signal arduino : std_logic_vector(15 downto 0);
+	signal lcd_data : std_logic_vector(7 downto 0);
 	signal gpio_pins : std_logic_vector(35 downto 0);
 	
 	-- GPU signals
@@ -248,9 +249,12 @@ begin
 	interrupts <= 3x"0" & int_timer & int_hblank & int_vblank & 2x"0";
 	
 	lcd_pins : if not USE_LCD generate
-		ARDUINO_IO(11 downto 0) <= arduino(11 downto 0);
+		ARDUINO_IO(15 downto 0) <= arduino(15 downto 0);
+	else generate
+		ARDUINO_IO(9 downto 8) <= lcd_data(1 downto 0);
+		ARDUINO_IO(7 downto 2) <= lcd_data(7 downto 2);
+		ARDUINO_IO(13 downto 10) <= arduino(13 downto 10);
 	end generate;
-	ARDUINO_IO(15 downto 12) <= arduino(15 downto 12);
 	
 	apu_pins : if not USE_APU generate
 		GPIO(35 downto 33) <= gpio_pins(35 downto 33);
@@ -358,10 +362,10 @@ begin
 				ticks => gpu_ticks,
 				vblank => int_vblank,
 				hblank => int_hblank,
-				lcd_data => ARDUINO_IO(7 downto 0),
-				lcd_write => ARDUINO_IO(9),
-				lcd_command => ARDUINO_IO(10),
-				lcd_enable => ARDUINO_IO(11)
+				lcd_data => lcd_data,
+				lcd_write => ARDUINO_IO(1),
+				lcd_command => ARDUINO_IO(14),
+				lcd_enable => ARDUINO_IO(15)
 			);
 	else generate
 		vga : vga_driver

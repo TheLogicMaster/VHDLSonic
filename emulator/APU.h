@@ -22,6 +22,7 @@ public:
     void reset();
     void sample(float *buffer, int samples);
     void update(int delta);
+    const SquareChannel &getSquareChannel(int channel);
     uint32_t read(uint32_t index);
     void write(uint32_t index, uint32_t value);
 

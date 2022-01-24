@@ -43,6 +43,10 @@ void APU::reset() {
         squareChannel = {};
 }
 
+const SquareChannel &APU::getSquareChannel(int channel) {
+    return squareChannels[channel];
+}
+
 uint32_t APU::read(uint32_t index) {
     switch (index) {
         case 0 ... SQUARE_CHANNELS: {

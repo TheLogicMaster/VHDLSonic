@@ -33,6 +33,46 @@ uint8_t *GPU::getDisplayBuffer() {
     return reinterpret_cast<uint8_t *>(displayBuffer);
 }
 
+bool GPU::isRendering() const {
+    return render;
+}
+
+int16_t GPU::getHorizontalScroll() const {
+    return horizontalScroll;
+}
+
+int16_t GPU::getVerticalScroll() const {
+    return verticalScroll;
+}
+
+uint16_t GPU::getWindowX() const {
+    return windowX;
+}
+
+uint16_t GPU::getWindowY() const {
+    return windowY;
+}
+
+Color GPU::getPaletteColor(int index) const {
+    return palette[index];
+}
+
+uint32_t GPU::getTileData(int index, int tileRow) const {
+    return tileData[index][tileRow];
+}
+
+uint8_t GPU::getBackgroundData(int index) const {
+    return backgroundData[index];
+}
+
+uint8_t GPU::getWindowData(int index) const {
+    return windowData[index];
+}
+
+const Sprite &GPU::getSprite(int index) const {
+    return sprites[index];
+}
+
 uint32_t GPU::read(uint32_t index) {
     switch (index) {
         case RENDER_ADDRESS: // Enable rendering

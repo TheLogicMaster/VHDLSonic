@@ -37,7 +37,7 @@
   (byte & 0x02 ? '1' : '0'), \
   (byte & 0x01 ? '1' : '0')
 
-#define WINDOW_COUNT 15
+#define WINDOW_COUNT 17
 
 struct WindowState {
     bool shown = false;
@@ -55,7 +55,7 @@ struct Layout {
     int windowHeight = 730;
 };
 
-#define LAYOUT_COUNT 3
+#define LAYOUT_COUNT 5
 static const Layout LAYOUTS[LAYOUT_COUNT]{
         {
                 "Demo",
@@ -75,6 +75,8 @@ static const Layout LAYOUTS[LAYOUT_COUNT]{
                         {false, 5, 26, 74, 168}, // PWM
                         {false, 5, 26, 0, 218}, // ROM
                         {false, 5, 26, 0, 218}, // RAM
+                        {false, 5, 26, 536, 352}, // VRAM
+                        {false, 5, 26, 556, 87}, // APU
                 },
                 4,
                 1226,
@@ -98,6 +100,8 @@ static const Layout LAYOUTS[LAYOUT_COUNT]{
                     {true, 1064, 472, 74, 168}, // PWM
                     {true, 506, 25, 0, 218}, // ROM
                     {true, 506, 248, 0, 218}, // RAM
+                    {false, 5, 26, 536, 352}, // VRAM
+                    {false, 5, 26, 556, 87}, // APU
             },
             3
         },
@@ -119,10 +123,62 @@ static const Layout LAYOUTS[LAYOUT_COUNT]{
                         {true, 1061, 563, 74, 168}, // PWM
                         {false, 5, 26, 0, 218}, // ROM
                         {false, 5, 26, 0, 218}, // RAM
+                        {false, 5, 26, 536, 352}, // VRAM
+                        {false, 5, 26, 556, 87}, // APU
                 },
                 3,
                 1497,
                 816
+        },
+        {
+                "Game Development",
+                {
+                        {true, 5, 26}, // Display
+                        {true, 566, 834, 164, 65}, // Processor
+                        {false, 5, 26, 496, 281}, // Print log
+                        {false, 5, 26, 552, 170}, // IO
+                        {false, 5, 26, 1268, 75}, // GPIO
+                        {false, 5, 26, 354, 430}, // Disassembly
+                        {true, 665, 24, 827, 538}, // Functions
+                        {true, 6, 568, 329, 261}, // Locals
+                        {true, 734, 568, 218, 146}, // Calls
+                        {true, 338, 568, 392, 261}, // Variables
+                        {false, 5, 26, 133, 168}, // Breakpoints
+                        {true, 734, 719, 217, 201}, // Timers
+                        {false, 5, 26, 74, 168}, // PWM
+                        {false, 5, 26, 0, 218}, // ROM
+                        {false, 5, 26, 0, 218}, // RAM
+                        {true, 956, 568, 536, 352}, // VRAM
+                        {true, 6, 834, 556, 87}, // APU
+                },
+                4,
+                1497,
+                925
+        },
+        {
+                "Gameplay",
+                {
+                        {true, 5, 26}, // Display
+                        {false, 5, 26, 164, 430}, // Processor
+                        {false, 5, 26, 551, 192}, // Print log
+                        {false, 5, 26, 552, 170}, // IO
+                        {false, 5, 26, 1268, 75}, // GPIO
+                        {false, 5, 26, 354, 430}, // Disassembly
+                        {false, 5, 26, 354, 358}, // Functions
+                        {false, 5, 26, 354, 135}, // Locals
+                        {false, 5, 26, 354, 106}, // Calls
+                        {false, 5, 26, 354, 107}, // Variables
+                        {false, 5, 26, 133, 180}, // Breakpoints
+                        {false, 5, 26, 217, 201}, // Timers
+                        {false, 5, 26, 74, 168}, // PWM
+                        {false, 5, 26, 0, 218}, // ROM
+                        {false, 5, 26, 0, 218}, // RAM
+                        {false, 5, 26, 536, 352}, // VRAM
+                        {false, 5, 26, 556, 87}, // APU
+                },
+                6,
+                986,
+                808
         },
 };
 
@@ -141,6 +197,8 @@ static const char* WINDOW_TIMERS = "Timers";
 static const char* WINDOW_PWM = "PWM";
 static const char* WINDOW_ROM = "ROM Viewer";
 static const char* WINDOW_RAM = "RAM Editor";
+static const char* WINDOW_VRAM = "VRAM";
+static const char* WINDOW_APU = "APU";
 static const char* WINDOWS[WINDOW_COUNT]{
     WINDOW_DISPLAY,
     WINDOW_PROCESSOR,
@@ -156,7 +214,9 @@ static const char* WINDOWS[WINDOW_COUNT]{
     WINDOW_TIMERS,
     WINDOW_PWM,
     WINDOW_ROM,
-    WINDOW_RAM
+    WINDOW_RAM,
+    WINDOW_VRAM,
+    WINDOW_APU
 };
 
 static SDL_Window *window;
@@ -164,6 +224,7 @@ static SDL_GLContext glContext;
 static SDL_AudioDeviceID audioDevice;
 static ImGuiIO *imguiIO;
 static GLuint displayTexture;
+static GLuint vramTexture;
 static bool exited = false;
 static bool layoutLoaded = false;
 static const Layout *layoutToLoad = nullptr;
@@ -398,6 +459,7 @@ static void displayMainMenuBar() {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
+            // Todo: Replace with snprintf and a loop
             ImGui::MenuItem("Show Display", nullptr, &windowStates[WINDOW_DISPLAY]);
             ImGui::MenuItem("Show Print Log", nullptr, &windowStates[WINDOW_PRINT_LOG]);
             ImGui::MenuItem("Show I/O Panel", nullptr, &windowStates[WINDOW_IO]);
@@ -454,6 +516,16 @@ static void displayDebugSymbolBrowser() {
 #endif
 }
 
+static void updateTexture(GLuint texture, int width, int height, uint8_t *buffer) {
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, buffer);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 static void displayScreen() {
     if (!windowStates[WINDOW_DISPLAY])
         return;
@@ -475,6 +547,7 @@ static void displayScreen() {
         ImGui::EndPopup();
     }
 
+    updateTexture(displayTexture, DISPLAY_WIDTH, DISPLAY_HEIGHT, emulator->getDisplayBuffer());
     ImGui::Image((ImTextureID)(intptr_t)displayTexture, ImVec2(DISPLAY_WIDTH * displayScale / 2., DISPLAY_HEIGHT * displayScale / 2.));
 
     // Options button
@@ -658,7 +731,20 @@ static void displayProcessor() {
     if (!windowStates[WINDOW_PROCESSOR])
         return;
 
-    ImGui::Begin(WINDOW_PROCESSOR, &windowStates[WINDOW_PROCESSOR]/*, ImGuiWindowFlags_NoResize*/);
+    ImGui::Begin(WINDOW_PROCESSOR, &windowStates[WINDOW_PROCESSOR]);
+
+    ImGui::Text("Interrupts:");
+    ImGui::SameLine();
+    if ((emulator->getStatus() & FLAG_I))
+        ImGui::TextColored(*outputColor, "enabled");
+    else
+        ImGui::TextColored(*breakpointColor, "disabled");
+
+    // Halted or not
+    ImGui::NextColumn();
+    ImGui::Text("    Halted:");
+    ImGui::SameLine();
+    ImGui::TextColored(halted ? *outputColor : *breakpointColor, halted ? "true" : "false");
 
     // CPU Flags
     ImGui::TextColored(*flagColor, "   Z");
@@ -675,18 +761,6 @@ static void displayProcessor() {
     ImGui::TextColored(*flagColor, "  V");
     ImGui::SameLine();
     ImGui::Text("= %d", (bool)(emulator->getStatus() & FLAG_V));
-    ImGui::Text("Interrupts:");
-    ImGui::SameLine();
-    if ((emulator->getStatus() & FLAG_I))
-        ImGui::TextColored(*outputColor, "enabled");
-    else
-        ImGui::TextColored(*breakpointColor, "disabled");
-
-    // Halted or not
-    ImGui::NextColumn();
-    ImGui::Text("    Halted:");
-    ImGui::SameLine();
-    ImGui::TextColored(halted ? *outputColor : *breakpointColor, halted ? "true" : "false");
 
     // CPU Registers
     ImGui::Columns(2, "registers");
@@ -1113,6 +1187,101 @@ static void displayPWM() {
     ImGui::End();
 }
 
+static void drawTileToBuffer(int tile, int x, int y, int textureWidth, int textureHeight, Color *buffer) {
+    for (int row = 0; row < 8; row++) {
+        int pixelY = y + row;
+        if (pixelY >= textureHeight)
+            break;
+        if (pixelY < 0)
+            continue;
+        uint32_t data = emulator->getTileData(tile, row);
+        for (int column = 7; column >= 0; column--) {
+            int pixelX = x + column;
+            if (pixelX >= textureWidth)
+                break;
+            if (pixelX >= 0)
+                buffer[textureWidth * pixelY + pixelX] = emulator->getPaletteColor((int)(data & 0xF));
+            data >>= 4;
+        }
+    }
+}
+
+static void displayVRAM() {
+    if (!windowStates[WINDOW_VRAM])
+        return;
+
+    ImGui::Begin(WINDOW_VRAM, &windowStates[WINDOW_VRAM], ImGuiWindowFlags_None);
+
+    Color buffer[WORLD_HEIGHT * WORLD_WIDTH];
+
+    if (ImGui::BeginTabBar("VRAMTabView")) {
+        if (ImGui::BeginTabItem("Tiles", nullptr, ImGuiTabItemFlags_None)) {
+            for (int i = 0; i < 256; i++)
+                drawTileToBuffer(i, (i % 16) * 8, (i / 16) * 8, 16 * 8, 16 * 8, buffer);
+            updateTexture(vramTexture, 16 * 8, 16 * 8, reinterpret_cast<uint8_t *>(buffer));
+            ImGui::Image((ImTextureID)(intptr_t)vramTexture, ImVec2(16 * 8 * 2, 16 * 8 * 2));
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Background", nullptr, ImGuiTabItemFlags_None)) {
+            ImGui::Text("Background Scroll: (%i, %i)", emulator->getHorizontalScroll(), emulator->getVerticalScroll());
+            for (int i = 0; i < 64 * 64; i++)
+                drawTileToBuffer(emulator->getBackgroundData(i), (i % 64) * 8, (i / 64) * 8, WORLD_WIDTH, WORLD_HEIGHT, buffer);
+            updateTexture(vramTexture, WORLD_WIDTH, WORLD_HEIGHT, reinterpret_cast<uint8_t *>(buffer));
+            ImGui::BeginChild("BackgroundView", ImVec2(ImGui::GetWindowWidth() - 10, ImGui::GetWindowHeight() - 80),false,ImGuiWindowFlags_HorizontalScrollbar);
+            ImGui::BeginChild("BackgroundClipping", {WORLD_WIDTH, WORLD_HEIGHT}, false);
+            auto draw_list = ImGui::GetWindowDrawList();
+            ImGui::Image((ImTextureID)(intptr_t)vramTexture, ImVec2(WORLD_WIDTH, WORLD_HEIGHT));
+            auto start = ImGui::GetItemRectMin();
+            for (int i = 0; i < 4; i++) {
+                auto pos = ImVec2(start.x + (float)emulator->getHorizontalScroll(), start.y + (float)emulator->getVerticalScroll());
+                if (i & 1)
+                    pos.x += WORLD_WIDTH;
+                if (i & 2)
+                    pos.y += WORLD_HEIGHT;
+                draw_list->AddRect(pos, {pos.x + DISPLAY_WIDTH, pos.y + DISPLAY_HEIGHT}, ImColor(*flagColor));
+            }
+            ImGui::EndChild();
+            ImGui::EndChild();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Window", nullptr, ImGuiTabItemFlags_None)) {
+            ImGui::Text("Window Position: (%u, %u)", emulator->getWindowX(), emulator->getWindowY());
+            for (int i = 0; i < 30 * 40; i++)
+                drawTileToBuffer(emulator->getWindowData(i), (i % 40) * 8, (i / 40) * 8, DISPLAY_WIDTH, DISPLAY_HEIGHT, buffer);
+            updateTexture(vramTexture, DISPLAY_WIDTH, DISPLAY_HEIGHT, reinterpret_cast<uint8_t *>(buffer));
+            ImGui::Image((ImTextureID)(intptr_t)vramTexture, ImVec2(DISPLAY_WIDTH, DISPLAY_HEIGHT));
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Sprites", nullptr, ImGuiTabItemFlags_None)) {
+            ImGui::BeginChild("SpritesView", ImVec2(ImGui::GetWindowWidth() - 10, ImGui::GetWindowHeight() - 60),false,ImGuiWindowFlags_HorizontalScrollbar);
+            for (int i = 0; i < 64; i++) {
+                const Sprite &sprite = emulator->getSprite(i);
+                ImGui::Text("Sprite %2i: X: %3i, Y: %3i, Tile: %3i, Mirror: %s%s", i, sprite.x, sprite.y, sprite.firstTile,
+                            sprite.horizontalFlip ? "h" : "-", sprite.verticalFlip ? "v" : "-");
+            }
+            ImGui::EndChild();
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
+
+    ImGui::End();
+}
+
+static void displayAPU() {
+    if (!windowStates[WINDOW_APU])
+        return;
+
+    ImGui::Begin(WINDOW_APU, &windowStates[WINDOW_APU], ImGuiWindowFlags_None);
+
+    for (int i = 0; i < SQUARE_CHANNELS; i++) {
+        const auto &channel = emulator->getSquareChannel(i);
+        ImGui::Text("Channel %i: Period: %u, %s, Duration: %u, Volume: %u", i, channel.period, channel.finite ? "Finite" : "Infinite", channel.duration, channel.volume);
+    }
+
+    ImGui::End();
+}
+
 static void handleShortcuts() {
     if (ImGui::IsKeyDown(SDL_SCANCODE_LCTRL)) {
         if (ImGui::IsKeyPressed(SDL_SCANCODE_P, false))
@@ -1231,15 +1400,6 @@ static void mainLoop(void *arg) {
 
     runEmulator();
 
-    // Update display texture from buffer
-    glBindTexture(GL_TEXTURE_2D, displayTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, DISPLAY_WIDTH, DISPLAY_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, emulator->getDisplayBuffer());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
     // Ensure windows are all registered
     {
         static bool init;
@@ -1283,6 +1443,8 @@ static void mainLoop(void *arg) {
     displayBreakpoints();
     displayTimers();
     displayPWM();
+    displayVRAM();
+    displayAPU();
 
 //    ImGui::ShowDemoWindow(); // Uncomment for IMGUI examples
 
@@ -1342,7 +1504,7 @@ int main(int argc, char* argv[]) {
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     auto window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    window = SDL_CreateWindow("Emulator", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1601, 816, window_flags);
+    window = SDL_CreateWindow("Emulator", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1601, 925, window_flags);
     glContext = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, glContext);
     SDL_GL_SetSwapInterval(1); // Enable vsync
@@ -1372,6 +1534,8 @@ int main(int argc, char* argv[]) {
 
     // Create display texture
     glGenTextures(1, &displayTexture);
+
+    glGenTextures(1, &vramTexture);
 
     // Initialize Audio
     SDL_AudioSpec want, have;

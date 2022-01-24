@@ -1995,8 +1995,6 @@ set_global_assignment -name VHDL_FILE gpu.vhd
 set_global_assignment -name ALLOW_ANY_RAM_SIZE_FOR_RECOGNITION OFF
 set_global_assignment -name VHDL_FILE gpu_test.vhd
 set_global_assignment -name VHDL_FILE gpu_lcd.vhd
-set_global_assignment -name VHDL_FILE gpu_lcd_test.vhd
-set_global_assignment -name VHDL_FILE lcd_test.vhd
 set_global_assignment -name VHDL_FILE apu_test.vhd
 set_global_assignment -name VHDL_FILE apu.vhd
 set_global_assignment -name VHDL_FILE audio_test.vhd

@@ -452,6 +452,50 @@ Timer &Emulator::getTimer(int id) {
     return timers[id];
 }
 
+bool Emulator::isRendering() const {
+    return gpu.isRendering();
+}
+
+int16_t Emulator::getHorizontalScroll() const {
+    return gpu.getHorizontalScroll();
+}
+
+int16_t Emulator::getVerticalScroll() const {
+    return gpu.getVerticalScroll();
+}
+
+uint16_t Emulator::getWindowX() const {
+    return gpu.getWindowX();
+}
+
+uint16_t Emulator::getWindowY() const {
+    return gpu.getWindowY();
+}
+
+Color Emulator::getPaletteColor(int index) const {
+    return gpu.getPaletteColor(index);
+}
+
+uint32_t Emulator::getTileData(int index, int tileRow) const {
+    return gpu.getTileData(index, tileRow);
+}
+
+uint8_t Emulator::getBackgroundData(int index) const {
+    return gpu.getBackgroundData(index);
+}
+
+uint8_t Emulator::getWindowData(int index) const {
+    return gpu.getWindowData(index);
+}
+
+const Sprite &Emulator::getSprite(int index) const {
+    return gpu.getSprite(index);
+}
+
+const SquareChannel &Emulator::getSquareChannel(int channel) {
+    return apu.getSquareChannel(channel);
+}
+
 uint8_t *Emulator::getMemory() {
     return memory;
 }

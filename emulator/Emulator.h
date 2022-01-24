@@ -51,6 +51,19 @@ public:
     uint8_t getPWMDuty(int id);
     bool getPWMEnabled(int id);
 
+    bool isRendering() const;
+    int16_t getHorizontalScroll() const;
+    int16_t getVerticalScroll() const;
+    uint16_t getWindowX() const;
+    uint16_t getWindowY() const;
+    Color getPaletteColor(int index) const;
+    uint32_t getTileData(int index, int tileRow) const;
+    uint8_t getBackgroundData(int index) const;
+    uint8_t getWindowData(int index) const;
+    const Sprite &getSprite(int index) const;
+
+    const SquareChannel &getSquareChannel(int channel);
+
     uint8_t* getMemory();
     uint8_t* getRAM();
     uint8_t* getROM();

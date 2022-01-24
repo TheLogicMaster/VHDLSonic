@@ -76,6 +76,16 @@ public:
     int update();
     void reset();
     uint8_t *getDisplayBuffer();
+    bool isRendering() const;
+    int16_t getHorizontalScroll() const;
+    int16_t getVerticalScroll() const;
+    uint16_t getWindowX() const;
+    uint16_t getWindowY() const;
+    Color getPaletteColor(int index) const;
+    uint32_t getTileData(int index, int tileRow) const;
+    uint8_t getBackgroundData(int index) const;
+    uint8_t getWindowData(int index) const;
+    const Sprite &getSprite(int index) const;
     uint32_t read(uint32_t index);
     void write(uint32_t index, uint32_t value);
 

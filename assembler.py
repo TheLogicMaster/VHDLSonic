@@ -293,61 +293,64 @@ def output_branch_instr(params, opcode):
 
 # Parse a comment for C debug symbols
 def parse_comment(comment):
-    comment_parts = comment.split(":")
-    location = comment_parts[-1].split("@")
-    line = 0
-    source = ""
-    if comment_parts[0] in ["#FUNC", "#CODE", "#VAR", "#LOCAL"]:
-        line = int(location[0][1:])
-        source = location[1].replace("\\", "/").replace("./build/", "")
-    if comment_parts[0] == "#FUNC":
-        c_functions[comment_parts[1]] = {
-            "line": line,
-            "frame": int(comment_parts[2]),
-            "source": source,
-            "address": address,
-            "code": [],
-            "locals": []
-        }
-    elif comment_parts[0] == "#CODE":
-        if len(c_functions[comment_parts[1]]["code"]) > 0:
-            c_functions[comment_parts[1]]["code"][-1]["end"] = address
-        c_functions[comment_parts[1]]["code"].append({
-            "line": line,
-            "source": source,
-            "address": address
-        })
-    elif comment_parts[0] == "#RETURN":
-        c_functions[comment_parts[1]]["end"] = address
-    elif comment_parts[0] == "#STARTCODE":
-        c_functions[comment_parts[1]]["start_code"] = address
-    elif comment_parts[0] == "#ENDCODE":
-        c_functions[comment_parts[1]]["end_code"] = address
-        if len(c_functions[comment_parts[1]]["code"]) > 0:
-            c_functions[comment_parts[1]]["code"][-1]["end"] = address
-    elif comment_parts[0] == "#VAR" or comment_parts[0] == "#LOCAL":
-        func = None
-        offset = None
-        if comment_parts[0] == "#LOCAL":
-            offset = int(comment_parts[2])
-            comment_parts.pop(2)
-            func = comment_parts[1]
-            comment_parts.pop(1)
-        type_str = comment_parts[2].split("[")[0].replace("*", "")
-        var = {
-            "line": line,
-            "source": source,
-            "address": data_address if comment_parts[0] == "#VAR" else offset,
-            "type": type_str[0],
-            "type_size": 0 if type_str[0] not in ['u', 'i'] else int(type_str[1:]),
-            "pointer": "*" in comment_parts[2],
-            "array": int(comment_parts[2].split("[")[1][:-1]) if "[" in comment_parts[2] else 0
-        }
-        if comment_parts[0] == "#VAR":
-            c_variables[comment_parts[1]] = var
-        else:
-            var["name"] = comment_parts[1]
-            c_functions[func]["locals"].append(var)
+    try:
+        comment_parts = comment.split(":")
+        location = comment_parts[-1].split("@")
+        line = 0
+        source = ""
+        if comment_parts[0] in ["#FUNC", "#CODE", "#VAR", "#LOCAL"]:
+            line = int(location[0][1:])
+            source = location[1].replace("\\", "/").replace("./build/", "")
+        if comment_parts[0] == "#FUNC":
+            c_functions[comment_parts[1]] = {
+                "line": line,
+                "frame": int(comment_parts[2]),
+                "source": source,
+                "address": address,
+                "code": [],
+                "locals": []
+            }
+        elif comment_parts[0] == "#CODE":
+            if len(c_functions[comment_parts[1]]["code"]) > 0:
+                c_functions[comment_parts[1]]["code"][-1]["end"] = address
+            c_functions[comment_parts[1]]["code"].append({
+                "line": line,
+                "source": source,
+                "address": address
+            })
+        elif comment_parts[0] == "#RETURN":
+            c_functions[comment_parts[1]]["end"] = address
+        elif comment_parts[0] == "#STARTCODE":
+            c_functions[comment_parts[1]]["start_code"] = address
+        elif comment_parts[0] == "#ENDCODE":
+            c_functions[comment_parts[1]]["end_code"] = address
+            if len(c_functions[comment_parts[1]]["code"]) > 0:
+                c_functions[comment_parts[1]]["code"][-1]["end"] = address
+        elif comment_parts[0] == "#VAR" or comment_parts[0] == "#LOCAL":
+            func = None
+            offset = None
+            if comment_parts[0] == "#LOCAL":
+                offset = int(comment_parts[2])
+                comment_parts.pop(2)
+                func = comment_parts[1]
+                comment_parts.pop(1)
+            type_str = comment_parts[2].split("[")[0].replace("*", "")
+            var = {
+                "line": line,
+                "source": source,
+                "address": data_address if comment_parts[0] == "#VAR" else offset,
+                "type": type_str[0],
+                "type_size": 0 if type_str[0] not in ['u', 'i'] else int(type_str[1:]),
+                "pointer": "*" in comment_parts[2],
+                "array": int(comment_parts[2].split("[")[1][:-1]) if "[" in comment_parts[2] else 0
+            }
+            if comment_parts[0] == "#VAR":
+                c_variables[comment_parts[1]] = var
+            else:
+                var["name"] = comment_parts[1]
+                c_functions[func]["locals"].append(var)
+    except:
+        print(f'Warning: Failed to parse debug symbol comment: "{comment}"')
 
 
 def parse_file():
