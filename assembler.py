@@ -10,6 +10,8 @@ import shutil
 import subprocess
 import shlex
 import platform
+import threading
+
 import basic
 
 constants = {}
@@ -732,7 +734,7 @@ def main():
     parser.add_argument('program', help='The program file to assemble')
     parser.add_argument('-t', '--type', default='assembly', choices=['assembly', 'c', 'basic'])
     parser.add_argument('-r', '--run', action='store_true', help="Whether to run the emulator after assembly")
-    parser.add_argument('-f', '--fpga', default='none', choices=['none', 'patch', 'flash'], type=str.lower, help="Whether to patch or run for FPGA (Linux only)")
+    parser.add_argument('-f', '--fpga', default='none', choices=['none', 'patch', 'flash', 'debug'], type=str.lower, help="Whether to patch or run for FPGA (Linux only)")
     parser.add_argument('-e', '--emulator', help='The path to the emulator if not "../emulator/build/Emulator"')
     parser.add_argument('-c', '--compiler', help='The path to the compiler if not "../vbcc/bin/vbccsonic"')
     parser.add_argument('-m', '--memory', action='store_true', help='Assemble for being run by bootloader')
@@ -915,15 +917,177 @@ def main():
     bash = 'wsl /bin/bash' if 'Windows' in platform.system() else '/bin/bash'
     if args.fpga == "patch":
         os.system(f'{bash} ../fpga/patch_rom.sh ./build/"{rom_name}"')
-    elif args.fpga == "flash":
+    elif args.fpga == "flash" or args.fpga == "debug":
         os.system(f'{bash} ../fpga/incremental_flash.sh ./build/"{rom_name}"')
 
     # Run emulator if needed
-    if args.run:
+    if args.run or args.fpga == "debug":
         os.chdir('./build')
         debug = f'-d "{debug_path}"' if args.debug else ""
-        cmd = f"\"{args.emulator if args.emulator else os.path.join(os.pardir, os.pardir, 'emulator/build/Emulator')}\" -r \"{rom_name}\" {debug}"
-        subprocess.run(shlex.split(cmd))
+        fpga = "-f" if args.fpga == "debug" else ""
+        cmd = f"\"{args.emulator if args.emulator else os.path.join(os.pardir, os.pardir, 'emulator/build/Emulator')}\" -r \"{rom_name}\" {debug} {fpga}"
+
+        if args.fpga == "debug":
+            uart = None
+            try:
+                import intel_jtag_uart
+                uart = intel_jtag_uart.intel_jtag_uart()
+            except SystemExit:
+                print(f'Warning: Failed to load dynamic libraries for UART')
+            except Exception as e:
+                print(f'Error: Failed to open UART connection: {e}')
+
+            def send_fpga_command(fpga_command):
+                if uart:
+                    uart.write(f'iiiii{fpga_command}'.encode())
+                else:
+                    subprocess.run(shlex.split(f"{bash} {os.path.join(os.pardir, os.pardir, 'fpga', 'uart_send.sh')} \"i{fpga_command}\""))
+
+            proc = subprocess.Popen(shlex.split(cmd), stderr=subprocess.PIPE, stdin=subprocess.PIPE, text=True)
+
+            tcl_proc = None  # type: subprocess.Popen[str] | None
+            thread = None  # type: threading.Thread | None
+
+            def spawn_tcl():
+                nonlocal tcl_proc
+                if tcl_proc:
+                    tcl_proc.terminate()
+                tcl_proc = subprocess.Popen(shlex.split(f"{bash} ./tcl_debug_terminal.sh"), stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, text=True,
+                                            cwd=os.path.join(os.pardir, os.pardir, 'fpga'))
+                if send_tcl_command('foreach hardware_name [get_hardware_names] {\n'
+                                    '	puts $hardware_name\n'
+                                    '	if { [string match "USB-Blaster*" $hardware_name] } {\n'
+                                    '		set usbblaster_name $hardware_name\n'
+                                    '	}\n'
+                                    '}\n'
+                                    'foreach device_name [get_device_names -hardware_name $usbblaster_name] {\n'
+                                    '	puts $device_name\n'
+                                    '	if { [string match "@1*" $device_name] } {\n'
+                                    '		set test_device $device_name\n'
+                                    '	}\n'
+                                    '}\n'
+                                    'begin_memory_edit -hardware_name $usbblaster_name -device_name $test_device'):
+                    print("Warning: Failed to connect to FPGA memory")
+                if send_tcl_command('open_session -name registers.stp'):
+                    print("Warning: Failed to connect to FPGA registers")
+
+            def send_tcl_command(tcl):
+                nonlocal thread
+
+                tcl_proc.stdin.write(f'if {{[ catch {{ {tcl} }} err ]}} {{ puts stderr $err }}; puts "DONE"; puts stderr "DONE"\n')
+                tcl_proc.stdin.flush()
+                errors = ""
+
+                def ingest_tcl_output():
+                    nonlocal errors
+                    while "DONE" not in tcl_proc.stdout.readline():
+                        pass
+                    while "DONE" not in (err := tcl_proc.stderr.readline().rstrip()):
+                        errors += err
+
+                if not thread or not thread.is_alive():
+                    thread = threading.Thread(target=ingest_tcl_output, daemon=True)
+                    thread.start()
+                thread.join(1)
+                if thread.is_alive():
+                    print("Warning: Ingest thread timed out, respawning TCL console")
+                    spawn_tcl()
+
+                if errors:
+                    print(f"TCL Error: {errors}")
+                return errors
+
+            spawn_tcl()
+
+            while True:
+                command = proc.stderr.readline().rstrip()
+                if not command:
+                    break
+                if command == "":
+                    continue
+
+                response = {
+                    'command': command
+                }
+
+                if command == "{UpdateMemory}":
+                    ram = []
+                    if not send_tcl_command('save_content_from_memory_to_file -instance_index 0 -timeout 2000 -mem_file_path "mem_dump.hex" -mem_file_type hex'):
+                        for line in open(os.path.join(os.pardir, os.pardir, "fpga/mem_dump.hex")).readlines()[int(0x18000 / 4):]:
+                            if len(line.rstrip()) == 19:
+                                ram.append(int(line[9:17], 16))
+                    response['memory'] = ram
+                elif command == "{UpdateRegisters}":
+                    registers = {}
+                    if not send_tcl_command('run -instance auto_signaltap_0 -signal_set "signal_set" -trigger "trigger" -timeout 1\n'
+                                            'export_data_log -instance auto_signaltap_0 -signal_set "signal_set" -trigger "trigger" -filename register_dump.csv -format csv'):
+                        csv_data = open(os.path.join(os.pardir, os.pardir, "fpga/register_dump.csv")).readlines()
+                        i = 0
+                        while i < len(csv_data):
+                            if csv_data[i].startswith("Data:"):
+                                groups = csv_data[i + 1].split(", ")
+                                register_indices = {}
+                                arrays = {}
+                                group_regex = re.compile(r"^((?:\w+[:|.]?)+)((?:\[\d+\.*\d*])*)$")
+                                for j in range(1, len(groups)):
+                                    if groups[j].isspace():
+                                        continue
+                                    match = re.match(group_regex, groups[j])
+                                    if match is None:
+                                        continue
+                                    name = match[1].split("|")[-1].split(".")[-1]
+                                    if name in register_indices:
+                                        continue
+                                    if match[2]:
+                                        splot = match[2].replace('[', '').split(']')[:-1]
+                                        if len(splot) == 2:
+                                            arrays[name] = int(splot[0].split('..')[0]) + 1
+                                    register_indices[name] = j
+                                data = csv_data[i + 3].split(", ")
+                                for register in register_indices:
+                                    if register in arrays:
+                                        array_size = arrays[register]
+                                        arr = [0 for _ in range(array_size)]
+                                        value_size = int(len(data[register_indices[register]]) / array_size)
+                                        for i in range(array_size):
+                                            arr[array_size - 1 - i] = int('{:032b}'.format(int(data[register_indices[register]][i * value_size: (i + 1) * value_size], 16))[::-1], 2)
+                                        registers[register] = arr
+                                    else:
+                                        registers[register] = int(data[register_indices[register]], 16)
+                                break
+                            i += 1
+                        else:
+                            print(f"Warning: Failed to parse register dump")
+                    else:
+                        print("Warning: Failed to dump registers")
+                    response["registers"] = registers
+                elif command == "{Reset}":
+                    send_fpga_command("R")
+                elif command == "{Continue}":
+                    send_fpga_command("C")
+                elif command == "{Step}":
+                    send_fpga_command("S")
+                elif command == "{Pause}":
+                    send_fpga_command("P")
+                elif match := re.match(r"^\{WriteMemory:(\d+),(\d+)}$", command):
+                    send_tcl_command(f"write_content_to_memory -instance_index 0 -start_address {int(match[1]) + int(0x18000 / 4)}"
+                                     f" -word_count 1 -content {format(int(match[2]), 'x').rjust(8, '0')} -content_in_hex")
+                elif match := re.match(r"^\{SetBreakpoint:(\d+),(\d+)}$", command):
+                    breakpoint_index = int(match[1])
+                    breakpoint_address = int(match[2])
+                    if breakpoint_index < 5:
+                        send_fpga_command(f"B{format(breakpoint_index, 'x')}{format(breakpoint_address, 'x')[::-1].ljust(8, '0')}")
+                else:
+                    print(f'Unknown command: {command}')
+
+                dumped = json.dumps(response).replace(' ', '')
+                try:
+                    proc.stdin.write(f"{dumped}\n")
+                    proc.stdin.flush()
+                except BrokenPipeError:
+                    pass
+        else:
+            subprocess.run(shlex.split(cmd))
 
 
 if __name__ == "__main__":

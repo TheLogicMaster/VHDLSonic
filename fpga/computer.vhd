@@ -59,7 +59,9 @@ architecture impl of computer is
 			address : out std_logic_vector(31 downto 0);
 			data_mask : out std_logic_vector(3 downto 0);
 			write_en : out std_logic;
-			reset_int : out std_logic
+			reset_int : out std_logic;
+			paused : in std_logic;
+			pc_out : out std_logic_vector(31 downto 0)
 		);
 	end component;
 	
@@ -80,6 +82,7 @@ architecture impl of computer is
 			write_en : in std_logic;
 			clock : in std_logic;
 			reset : in std_logic;
+			paused : in std_logic;
 			data_in : in std_logic_vector(31 downto 0);
 			data_out : out std_logic_vector(31 downto 0);
 			timer_int : out std_logic;
@@ -124,6 +127,7 @@ architecture impl of computer is
 		port (
 			clock : in std_logic;
 			reset : in std_logic;
+			paused : in std_logic;
 			pixel : in std_logic_vector(15 downto 0);
 			pixel_x : out std_logic_vector(9 downto 0);
 			pixel_y : out std_logic_vector(8 downto 0);
@@ -150,6 +154,7 @@ architecture impl of computer is
 		port (
 			clock : in std_logic;
 			reset : in std_logic;
+			paused : in std_logic;
 			pixel : in std_logic_vector(15 downto 0);
 			pixel_x : out std_logic_vector(9 downto 0);
 			pixel_y : out std_logic_vector(8 downto 0);
@@ -193,6 +198,16 @@ architecture impl of computer is
 		);
 	end component;
 	
+	component debug is
+		port (
+			clock : in std_logic;
+			reset : in std_logic;
+			pc : in std_logic_vector(31 downto 0);
+			debug_reset : out std_logic;
+			paused : out std_logic
+		);
+	end component;
+	
 	signal arduino : std_logic_vector(15 downto 0);
 	signal lcd_data : std_logic_vector(7 downto 0);
 	signal gpio_pins : std_logic_vector(35 downto 0);
@@ -232,11 +247,15 @@ architecture impl of computer is
 	signal reset_int : std_logic; -- Reset interrupt
 	signal reset : std_logic; -- Reset line
 	signal reset_trigger : std_logic; -- Trigger POR reset
+	signal debug_reset : std_logic;
+	
+	signal paused : std_logic;
+	signal pc : std_logic_vector(31 downto 0);
 	
 	-- System clock
 	signal clock : std_logic; -- Clock line
 begin
-	reset_trigger <= (not ARDUINO_RESET_N) or reset_int or (not KEY(0));
+	reset_trigger <= (not ARDUINO_RESET_N) or reset_int or (not KEY(0)) or debug_reset;
 	clock <= MAX10_CLK1_50;
 	
 	cpu_in <= 
@@ -265,7 +284,9 @@ begin
 		port map (
 			clock => clock,
 			reset => reset,
+			paused => paused,
 			int_in => interrupts,
+			pc_out => pc,
 			data_in => cpu_in,
 			data_out => data,
 			address => address,
@@ -290,6 +311,7 @@ begin
 			write_en => write_en,
 			clock => clock,
 			reset => reset,
+			paused => paused,
 			data_in => data,
 			data_out => microcontroller_data,
 			timer_int => int_timer,
@@ -348,6 +370,7 @@ begin
 			port map (
 				clock => MAX10_CLK1_50,
 				reset => reset,
+				paused => paused,
 				pixel => gpu_pixel,
 				pixel_x => gpu_pixel_x,
 				pixel_y => gpu_pixel_y,
@@ -372,6 +395,7 @@ begin
 			port map (
 				clock => MAX10_CLK1_50,
 				reset => reset,
+				paused => paused,
 				pixel => gpu_pixel,
 				pixel_x => gpu_pixel_x,
 				pixel_y => gpu_pixel_y,
@@ -399,5 +423,14 @@ begin
 			clock => clock,
 			reset_in => reset_trigger,
 			reset_out => reset
+		);
+		
+	debugging : debug
+		port map (
+			clock => clock,
+			reset => reset,
+			pc => pc,
+			debug_reset => debug_reset,
+			paused => paused
 		);
 end architecture;

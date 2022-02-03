@@ -18,7 +18,9 @@ architecture test of cpu_test is
 			address : out std_logic_vector(31 downto 0);
 			data_mask : out std_logic_vector(3 downto 0);
 			write_en : out std_logic;
-			reset_int : out std_logic
+			reset_int : out std_logic;
+			paused : in std_logic;
+			pc_out : out std_logic_vector(31 downto 0)
 		);
 	end component;
 	
@@ -31,6 +33,8 @@ architecture test of cpu_test is
 	signal data_mask : std_logic_vector(3 downto 0);
 	signal write_en : std_logic;
 	signal reset_int : std_logic;
+	signal paused : std_logic;
+	signal pc : std_logic_vector(31 downto 0);
 	
 	signal rom : std_logic_vector(31 downto 0);
 	signal ram : ram_type := (
@@ -49,7 +53,9 @@ begin
 			address => address,
 			data_mask => data_mask,
 			write_en => write_en,
-			reset_int => reset_int
+			reset_int => reset_int,
+			paused => paused,
+			pc_out => pc
 		);
 
 --	rom <= -- Test branching

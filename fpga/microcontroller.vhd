@@ -10,6 +10,7 @@ entity microcontroller is
 		write_en : in std_logic;
 		clock : in std_logic;
 		reset : in std_logic;
+		paused : in std_logic;
 		data_in : in std_logic_vector(31 downto 0);
 		data_out : out std_logic_vector(31 downto 0);
 		timer_int : out std_logic;
@@ -169,7 +170,7 @@ begin
 				timer_counts(i) <= 32x"0";
 				timer_ticks(i) <= 16x"0";
 				timer_rollover(i) <= '0';
-			elsif rising_edge(clock) then
+			elsif rising_edge(clock) and paused = '0' then
 				if write_en = '1' and index = 168 + i then
 					timer_counts(i) <= data_in;
 					timer_rollover(i) <= '0';

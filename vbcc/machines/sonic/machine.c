@@ -1183,13 +1183,13 @@ void cleanup_cg(FILE *f) {
 
     emit(f, "_initialize:\n");
 
-    // emit(f, "; Clear memory\n");
-    // emit(f, "\tldr x,$10000\n");
-    // emit(f, "\tldb r0,0\n");
-    // emit(f, "_clear_mem_loop:\n");
-    // emit(f, "\tstr r0,x++\n");
-    // emit(f, "\tcmp x,$20000\n");
-    // emit(f, "\tbne _clear_mem_loop\n\n");
+    emit(f, "; Clear memory\n");
+    emit(f, "\tldr x,$18000\n");
+    emit(f, "\tldr r0,0\n");
+    emit(f, "_clear_mem_loop:\n");
+    emit(f, "\tstr r0,x++\n");
+    emit(f, "\tcmp x,$20000\n");
+    emit(f, "\tbne _clear_mem_loop\n\n");
 
     emit(f, "; Static variable initialization\n");
     char *previousVariable = NULL;

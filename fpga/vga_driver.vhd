@@ -11,6 +11,7 @@ entity vga_driver is
 	port (
 		clock : in std_logic;
 		reset : in std_logic;
+		paused : in std_logic;
 		pixel : in std_logic_vector(15 downto 0);
 		pixel_x : out std_logic_vector(9 downto 0);
 		pixel_y : out std_logic_vector(8 downto 0);
@@ -59,8 +60,8 @@ begin
 	blanking <= '1' when v_cnt >= 10 + 480 else '0';
 	ticks <= h_cnt(0) & vga_clk;
 	
-	vblank <= '1' when h_cnt = 0 and v_cnt = 10 + 480 else '0';
-	hblank <= '1' when h_cnt = 96 + 48 + 640 - 1 and v_cnt >= 10 - 1 and v_cnt < 10 + 480 else '0';
+	vblank <= '1' when h_cnt = 0 and v_cnt = 10 + 480 and paused = '0' else '0';
+	hblank <= '1' when h_cnt = 96 + 48 + 640 - 1 and v_cnt >= 10 - 1 and v_cnt < 10 + 480 and paused = '0' else '0';
 	
 	vga_hs <= '1' when h_cnt < 96 else '0';
 	vga_vs <= '1' when v_cnt < 2 else '0';

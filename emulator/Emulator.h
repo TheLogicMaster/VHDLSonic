@@ -1,110 +1,33 @@
 #ifndef EMULATOR_EMULATOR_H
 #define EMULATOR_EMULATOR_H
 
-#include <cstdint>
-#include <queue>
 #include "GPU.h"
 #include "APU.h"
+#include "Computer.h"
 
-#define PRINT_BUFFER 10000
-
-#define FLAG_I 1 << 4
-#define FLAG_Z 1 << 3
-#define FLAG_C 1 << 2
-#define FLAG_N 1 << 1
-#define FLAG_V 1 << 0
-
-struct Timer {
-    bool enabled;
-    bool repeat;
-    uint16_t divider = 1;
-    uint64_t count;
-    uint32_t compare;
-    uint32_t ticks;
-};
-
-class Emulator {
+class Emulator : public Computer {
 public:
-    Emulator();
-    void load(uint8_t *romData, long size);
-    int run();
-    void reset();
-    void fixedUpdate(int delta);
+    int run(int delta) override;
+    void reset() override;
 
-    uint8_t *getDisplayBuffer();
-    void sampleAudio(float *buffer, int samples);
+    uint8_t *getDisplayBuffer() override;
+    bool isRendering() const override;
+    int16_t getHorizontalScroll() const override;
+    int16_t getVerticalScroll() const override;
+    uint16_t getWindowX() const override;
+    uint16_t getWindowY() const override;
+    Color getPaletteColor(int index) const override;
+    uint32_t getTileData(int index, int tileRow) const override;
+    uint8_t getBackgroundData(int index) const override;
+    uint8_t getWindowData(int index) const override;
+    const Sprite &getSprite(int index) const override;
 
-    std::string &getPrintBuffer();
-    void uartReceive(char* bytes, uint8_t length);
-    bool& getSwitch(int id);
-    bool& getButton(int id);
-    bool getLight(int id);
-    uint8_t getSevenSegmentDisplay(int id);
-    bool& getGPIO(int id);
-    bool& getArduinoIO(int id);
-    bool getGpioOutput(int id);
-    bool getArduinoOutput(int id);
-    uint8_t& getADC(int id);
-    uint8_t getTimerIE() const;
-    uint8_t getTimerIF() const;
-    Timer& getTimer(int id);
-    uint8_t getPWMDuty(int id);
-    bool getPWMEnabled(int id);
-
-    bool isRendering() const;
-    int16_t getHorizontalScroll() const;
-    int16_t getVerticalScroll() const;
-    uint16_t getWindowX() const;
-    uint16_t getWindowY() const;
-    Color getPaletteColor(int index) const;
-    uint32_t getTileData(int index, int tileRow) const;
-    uint8_t getBackgroundData(int index) const;
-    uint8_t getWindowData(int index) const;
-    const Sprite &getSprite(int index) const;
-
-    const SquareChannel &getSquareChannel(int channel);
-
-    uint8_t* getMemory();
-    uint8_t* getRAM();
-    uint8_t* getROM();
-    uint32_t getReg(uint8_t reg) const;
-    uint32_t getPC() const;
-    uint8_t getIE() const;
-    uint8_t getIF() const;
-    uint32_t getFP() const;
-    uint32_t getSP() const;
-    uint8_t getStatus() const;
+    void sampleAudio(float *buffer, int samples) override;
+    const SquareChannel &getSquareChannel(int channel) override;
 
 private:
     GPU gpu{};
     APU apu{};
-
-    bool switches[10]{};
-    bool lights[10]{};
-    bool buttons[2]{};
-    uint8_t sevenSegmentDisplays[6]{};
-    bool gpio[36]{};
-    bool gpioOutput[36]{};
-    bool arduinoIO[16]{};
-    bool arduinoOutput[16]{};
-    uint8_t analogDigitalConverters[6]{};
-    std::queue<uint8_t> uartInBuffer{};
-    std::string printBuffer{};
-    Timer timers[8]{};
-    uint8_t timerInterruptEnable = 0;
-    uint8_t timerInterruptFlags = 0;
-    uint8_t pwmDuty[8]{};
-    bool pwmEnabled[8]{};
-
-    uint8_t memory[0x20000]{};
-    uint8_t *rom;
-    uint8_t *ram;
-
-    uint32_t registers[16]{};
-    uint8_t status = 0;
-    uint32_t pc = 0;
-    uint8_t interruptEnable = 0;
-    uint8_t interruptFlags = 0;
 
     uint32_t readMicrocontroller(uint32_t address);
     void writeMicrocontroller(uint32_t address, uint32_t value);

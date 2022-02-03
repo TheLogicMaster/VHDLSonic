@@ -9,6 +9,8 @@ entity cpu is
 		clock : in std_logic;
 		reset : in std_logic;
 		int_in : in std_logic_vector(7 downto 0);
+		paused : in std_logic;
+		pc_out : out std_logic_vector(31 downto 0);
 		data_in : in std_logic_vector(31 downto 0);
 		data_out : buffer std_logic_vector(31 downto 0);
 		address : buffer std_logic_vector(31 downto 0);
@@ -225,6 +227,8 @@ begin
 	
 	reset_int <= '1' when state = s_reset else '0';
 	
+	pc_out <= std_logic_vector(pc);
+	
 	process(all)
 		variable done : boolean;
 		variable interrupts : std_logic_vector(7 downto 0);
@@ -303,54 +307,60 @@ begin
 					
 					-- Decode instuction 2
 					when s_decode_2 =>
-						instr <= unsigned(data);
-						pc <= pc + 4;
-						case to_integer(unsigned(data(31 downto 24))) is
-							when 16#00# => state <= s_decode_1; -- NOP
-							when 16#01# to 16#0F# => state <= s_branch_1; -- Branch instructions
-							when 16#12# => state <= s_load_imm_1; -- Load immediate
-							when 16#13# to 16#15# => state <= s_load_abs_1; -- Absolute load instructions
-							when 16#16# to 16#18# => state <= s_load_ind_1; -- Indexed load instructions
-							when 16#19# to 16#1B# => state <= s_load_rel_1; -- Relative load instructions
-							when 16#1C# to 16#1E# => state <= s_store_abs_1; -- Absolute store instructions
-							when 16#1F# to 16#21# => state <= s_store_ind_1; -- Indexed store instructions
-							when 16#22# to 16#24# => state <= s_store_rel_1; -- Relative store instructions
-							when 16#25# => -- TFR
-								reg_file(to_integer(unsigned(data(23 downto 20)))) <= reg_file(to_integer(unsigned(data(19 downto 16))));
-								state <= s_decode_1;
-							when 16#26# to 16#3F# => -- ALU instructions
-								if data(24) = '1' or data(31 downto 24) = x"3E" or data(31 downto 24) = x"3F" then
-									state <= s_alu_reg;
-								else
-									state <= s_alu_imm_1;
-								end if;
-							when 16#40# => -- SEI
-								flag_i <= '1';
-								state <= s_decode_1;
-							when 16#41# => -- CLI
-								flag_i <= '0';
-								state <= s_decode_1;
-							when 16#42# => -- SEC
-								flag_c <= '1';
-								state <= s_decode_1;
-							when 16#43# => -- CLC
-								flag_c <= '0';
-								state <= s_decode_1;
-							when 16#44# => state <= s_push_1; -- PUSH
-							when 16#45# =>
-								sp <= sp - 4;
-								state <= s_pop_1; -- POP
-							when 16#46# => state <= s_jmp_imm_1; -- JMP imm
-							when 16#47# => -- JMP reg
-								pc <= reg_file(to_integer(unsigned(data(23 downto 20))));
-								state <= s_decode_1;
-							when 16#48# => state <= s_jsr_1; -- JSR
-							when 16#49# => state <= s_ret_1; -- RET
-							when 16#4A# => state <= s_int_1; -- INT
-							when 16#4B# => state <= s_rti_1; -- RTI
-							when 16#4C# => state <= s_halted; -- HALT
-							when others => state <= s_decode_1; -- Illegal instructions, treat as NOP for now
-						end case;
+						if paused = '1' then
+							state <= s_decode_1;
+						else
+							instr <= unsigned(data);
+							if data(31 downto 24) /= x"4C" then -- Save PC for HALT
+								pc <= pc + 4;
+							end if;
+							case to_integer(unsigned(data(31 downto 24))) is
+								when 16#00# => state <= s_decode_1; -- NOP
+								when 16#01# to 16#0F# => state <= s_branch_1; -- Branch instructions
+								when 16#12# => state <= s_load_imm_1; -- Load immediate
+								when 16#13# to 16#15# => state <= s_load_abs_1; -- Absolute load instructions
+								when 16#16# to 16#18# => state <= s_load_ind_1; -- Indexed load instructions
+								when 16#19# to 16#1B# => state <= s_load_rel_1; -- Relative load instructions
+								when 16#1C# to 16#1E# => state <= s_store_abs_1; -- Absolute store instructions
+								when 16#1F# to 16#21# => state <= s_store_ind_1; -- Indexed store instructions
+								when 16#22# to 16#24# => state <= s_store_rel_1; -- Relative store instructions
+								when 16#25# => -- TFR
+									reg_file(to_integer(unsigned(data(23 downto 20)))) <= reg_file(to_integer(unsigned(data(19 downto 16))));
+									state <= s_decode_1;
+								when 16#26# to 16#3F# => -- ALU instructions
+									if data(24) = '1' or data(31 downto 24) = x"3E" or data(31 downto 24) = x"3F" then
+										state <= s_alu_reg;
+									else
+										state <= s_alu_imm_1;
+									end if;
+								when 16#40# => -- SEI
+									flag_i <= '1';
+									state <= s_decode_1;
+								when 16#41# => -- CLI
+									flag_i <= '0';
+									state <= s_decode_1;
+								when 16#42# => -- SEC
+									flag_c <= '1';
+									state <= s_decode_1;
+								when 16#43# => -- CLC
+									flag_c <= '0';
+									state <= s_decode_1;
+								when 16#44# => state <= s_push_1; -- PUSH
+								when 16#45# =>
+									sp <= sp - 4;
+									state <= s_pop_1; -- POP
+								when 16#46# => state <= s_jmp_imm_1; -- JMP imm
+								when 16#47# => -- JMP reg
+									pc <= reg_file(to_integer(unsigned(data(23 downto 20))));
+									state <= s_decode_1;
+								when 16#48# => state <= s_jsr_1; -- JSR
+								when 16#49# => state <= s_ret_1; -- RET
+								when 16#4A# => state <= s_int_1; -- INT
+								when 16#4B# => state <= s_rti_1; -- RTI
+								when 16#4C# => state <= s_halted; -- HALT
+								when others => state <= s_decode_1; -- Illegal instructions, treat as NOP for now
+							end case;
+						end if;
 					
 					-- Branch instructions 1
 					-- Todo: This could be replaced with one giant if statement if desired

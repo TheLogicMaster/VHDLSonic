@@ -11,6 +11,7 @@ entity lcd_driver is
 	port (
 		clock : in std_logic;
 		reset : in std_logic;
+		paused : in std_logic;
 		pixel : in std_logic_vector(15 downto 0);
 		pixel_x : out std_logic_vector(9 downto 0);
 		pixel_y : buffer std_logic_vector(8 downto 0);
@@ -51,8 +52,8 @@ begin
 	blanking <= '1' when lcd_state = 22 else '0';
 	ticks <= std_logic_vector(lcd_count(1 downto 0));
 	
-	vblank <= '1' when lcd_state = 22 and lcd_count = 0 else '0';
-	hblank <= '1' when lcd_state = 20 and lcd_count = 0 else '0';
+	vblank <= '1' when lcd_state = 22 and lcd_count = 0 and paused = '0' else '0';
+	hblank <= '1' when lcd_state = 20 and lcd_count = 0 and paused = '0' else '0';
 	
 	process(all)
 	begin

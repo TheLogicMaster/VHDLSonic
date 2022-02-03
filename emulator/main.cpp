@@ -21,9 +21,10 @@
 #include "json.hpp"
 #include "cxxopts.hpp"
 #include "Disassembler.h"
-#include "Emulator.h"
 #include "DebugSymbols.h"
 #include "Utilities.h"
+#include "Emulator.h"
+#include "FPGA.h"
 
 // Macros from: https://github.com/drhelius/Gearboy/blob/master/platforms/desktop-shared/gui_debug.h
 #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
@@ -236,7 +237,8 @@ static bool keypadPeripheral = false;
 static int processorSpeeds[8]{0, 1, 2, 3, 4, 5, 9, 14};
 static int processorSpeed = 0;
 
-static Emulator *emulator;
+static Computer *computer;
+static FPGA *fpga;
 static Disassembler* disassembler;
 static MemoryEditor *ramEditor;
 static MemoryEditor *romViewer;
@@ -253,7 +255,7 @@ static bool disassemblerJumpToPC = true;
 static bool functionsJumpToPC = true;
 static bool stepBreakpoint = false;
 static bool stepBreakpointC = false;
-static bool enableBreakpoints = false;
+static bool enableBreakpoints = true;
 static bool showAllLocals = false;
 static std::set<uint32_t> breakpoints{};
 static char breakpointText[6]{};
@@ -388,9 +390,9 @@ static bool loadRom(const std::string &path) {
     input.seekg(0, std::ios::beg);
     input.read(reinterpret_cast<char *>(rom), len);
     input.close();
-    emulator->load(rom, len);
+    computer->load(rom, len);
     delete disassembler;
-    disassembler = new Disassembler(emulator->getMemory());
+    disassembler = new Disassembler(computer->getMemory());
 
     debugFunctions.clear();
     debugVariables.clear();
@@ -408,24 +410,34 @@ static bool loadRom(const std::string &path) {
         rom = new uint8_t[len];
         memcpy(rom, fetch->data, len);
         emscripten_fetch_close(fetch);
-        emulator->load(rom, len);
+        computer->load(rom, len);
         delete disassembler;
-        disassembler = new Disassembler(emulator->getMemory());
+        disassembler = new Disassembler(computer->getMemory());
         halted = false;
         breakpoints.clear();
         enableBreakpoints = false;
-        emulator->reset();
+        computer->reset();
     };
     emscripten_fetch(&attr, path.c_str());
 #endif
     return true;
 }
 
+static void updateDebuggerBreakpoints() {
+    if (!fpga)
+        return;
+    for (const auto &breakpoint : breakpoints)
+        if (enableBreakpoints)
+            fpga->addBreakpoint(breakpoint);
+        else
+            fpga->clearBreakpoint(breakpoint);
+}
+
 static void displayMainMenuBar() {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
 #ifndef __EMSCRIPTEN__
-            if (ImGui::MenuItem("Open ROM", "ctrl+O"))
+            if (not fpga and ImGui::MenuItem("Open ROM", "ctrl+O"))
                 ImGuiFileDialog::Instance()->OpenDialog("ChooseROM", "Choose ROM", ".bin", ".");
             if (ImGui::MenuItem("Load Debug Symbols"))
                 ImGuiFileDialog::Instance()->OpenDialog("LoadSymbols", "Load Debug Symbols", ".debug", ".");
@@ -439,21 +451,36 @@ static void displayMainMenuBar() {
 #endif
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Emulation")) {
+        if (ImGui::BeginMenu(fpga ? "Debugging" : "Emulation")) {
             if (ImGui::MenuItem("Reset", "ctrl+R")) {
                 halted = false;
-                emulator->reset();
+                computer->reset();
+                updateDebuggerBreakpoints();
             }
-            ImGui::MenuItem("Pause", "ctrl+P", &paused);
-            ImGui::MenuItem("Enable Breakpoints", "ctrl+B", &enableBreakpoints);
-            if (ImGui::MenuItem("Step CPU", "ctrl+Z") and !halted and paused)
-                stepBreakpoint = true;
-            if (ImGui::MenuItem("Step C Code", "ctrl+X") and !halted and paused and !debugFunctions.empty())
-                stepBreakpointC = true;
-            ImGui::Combo("Processor Speed", &processorSpeed, " 1 MHz\0 512 KHz\0 256 KHz\0 128 KHz\0 64 KHz\0 32 KHz\0 2 Khz\0 64 Hz\0", 8);
+            if (fpga) {
+                ImGui::MenuItem("Auto-update", "ctrl+U", &fpga->getAutoUpdate());
+                if (ImGui::MenuItem("Update Memory", "ctrl+M"))
+                    fpga->updateMemory();
+                if (ImGui::MenuItem("Update Registers", "ctrl+N"))
+                    fpga->updateRegisters();
+                if (ImGui::MenuItem("Enable Breakpoints", "ctrl+B", &enableBreakpoints))
+                    updateDebuggerBreakpoints();
+                if (ImGui::MenuItem("Step CPU", "ctrl+Z"))
+                    fpga->step();
+                if (ImGui::MenuItem("Pause", "ctrl+P", fpga->isPaused()))
+                    fpga->pause();
+            } else {
+                ImGui::MenuItem("Pause", "ctrl+P", &paused);
+                ImGui::MenuItem("Enable Breakpoints", "ctrl+B", &enableBreakpoints);
+                if (ImGui::MenuItem("Step CPU", "ctrl+Z") and !halted and paused)
+                    stepBreakpoint = true;
+                if (ImGui::MenuItem("Step C Code", "ctrl+X") and !halted and paused and !debugFunctions.empty())
+                    stepBreakpointC = true;
+                ImGui::Combo("Processor Speed", &processorSpeed, " 1 MHz\0 512 KHz\0 256 KHz\0 128 KHz\0 64 KHz\0 32 KHz\0 2 Khz\0 64 Hz\0", 8);
+            }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Peripherals")) {
+        if (!fpga and ImGui::BeginMenu("Peripherals")) {
             ImGui::MenuItem("Controller", nullptr, &controllerPeripheral);
             ImGui::MenuItem("Keypad", nullptr, &keypadPeripheral);
             ImGui::EndMenu();
@@ -499,7 +526,7 @@ static void displayRomBrowser() {
             breakpoints.clear();
             enableBreakpoints = false;
             loadRom(ImGuiFileDialog::Instance()->GetCurrentPath() + "/" + ImGuiFileDialog::Instance()->GetCurrentFileName());
-            emulator->reset();
+            computer->reset();
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -547,7 +574,8 @@ static void displayScreen() {
         ImGui::EndPopup();
     }
 
-    updateTexture(displayTexture, DISPLAY_WIDTH, DISPLAY_HEIGHT, emulator->getDisplayBuffer());
+    if (computer->getDisplayBuffer())
+        updateTexture(displayTexture, DISPLAY_WIDTH, DISPLAY_HEIGHT, computer->getDisplayBuffer());
     ImGui::Image((ImTextureID)(intptr_t)displayTexture, ImVec2(DISPLAY_WIDTH * displayScale / 2., DISPLAY_HEIGHT * displayScale / 2.));
 
     // Options button
@@ -564,9 +592,9 @@ static void displayMemoryViewers() {
     romViewer->Open = windowStates[WINDOW_ROM];
     ramEditor->Open = windowStates[WINDOW_RAM];
     if (romViewer->Open)
-        romViewer->DrawWindow(WINDOW_ROM, emulator->getROM(), 0x18000);
+        romViewer->DrawWindow(WINDOW_ROM, computer->getROM(), 0x18000);
     if (ramEditor->Open)
-        ramEditor->DrawWindow(WINDOW_RAM, emulator->getRAM(), 0x8000, 0x18000);
+        ramEditor->DrawWindow(WINDOW_RAM, computer->getRAM(), 0x8000, 0x18000);
     windowStates[WINDOW_ROM] = romViewer->Open;
     windowStates[WINDOW_RAM] = ramEditor->Open;
 }
@@ -579,18 +607,18 @@ static void displayPrintLog() {
     ImGui::Begin(WINDOW_PRINT_LOG, &windowStates[WINDOW_PRINT_LOG]);
     ImGui::BeginChild("PrintLog", ImVec2(ImGui::GetWindowWidth() - 10, ImGui::GetWindowHeight() - 60), true);
     ImGui::PushTextWrapPos(ImGui::GetWindowWidth() - 30);
-    ImGui::TextUnformatted(emulator->getPrintBuffer().data());
+    ImGui::TextUnformatted(computer->getPrintBuffer().data());
     ImGui::PopTextWrapPos();
     ImGui::EndChild();
     if (ImGui::Button("Clear"))
-        emulator->getPrintBuffer().clear();
+        computer->getPrintBuffer().clear();
     ImGui::SameLine();
 
     ImGui::SetNextItemWidth(ImGui::GetWindowWidth() - 120);
     ImGui::InputText("", uartText, 255);
     ImGui::SameLine();
     if (ImGui::Button("Send")) {
-        emulator->uartReceive(uartText, strlen(uartText));
+        computer->uartReceive(uartText, strlen(uartText));
         uartText[0] = 0;
     }
     ImGui::End();
@@ -608,7 +636,7 @@ static void displayPanelIO() {
         ImGui::BeginGroup();
         ImGui::Dummy(ImVec2(1, 0));
         ImGui::SameLine();
-        ToggleButton(("SW" + std::to_string(i)).c_str(), &emulator->getSwitch(i));
+        ToggleButton(("SW" + std::to_string(i)).c_str(), &computer->getSwitch(i));
         ImGui::EndGroup();
         ImGui::NextColumn();
     }
@@ -622,7 +650,7 @@ static void displayPanelIO() {
     for (int i = 0; i < 10; i++) {
         ImVec2 p = ImGui::GetCursorScreenPos();
         ImDrawList* draw_list = ImGui::GetWindowDrawList();
-        draw_list->AddCircleFilled(ImVec2(p.x + 20, p.y + 15), 8, emulator->getLight(i) ?
+        draw_list->AddCircleFilled(ImVec2(p.x + 20, p.y + 15), 8, computer->getLight(i) ?
                                                                   IM_COL32(255, 50, 50, 255) : IM_COL32(50, 50, 50, 255));
         ImGui::Dummy(ImVec2(20, 22));
         ImGui::NextColumn();
@@ -636,7 +664,7 @@ static void displayPanelIO() {
     // Buttons
     for (int i = 0; i < 2; i++) {
         ImGui::Button(("BTN" + std::to_string(i)).c_str(), ImVec2(42, 42));
-        emulator->getButton(i) = ImGui::IsItemActive();
+        computer->getButton(i) = ImGui::IsItemActive();
         ImGui::NextColumn();
     }
 
@@ -646,7 +674,7 @@ static void displayPanelIO() {
         ImGui::BeginGroup();
         ImGui::Dummy(ImVec2(2, 0));
         ImGui::SameLine();
-        ImGui::Text("%x", emulator->getSevenSegmentDisplay(i) & 0xF);
+        ImGui::Text("%x", computer->getSevenSegmentDisplay(i) & 0xF);
         ImGui::EndGroup();
         ImGui::PopFont();
         ImGui::NextColumn();
@@ -674,13 +702,13 @@ static void displayPanelGPIO() {
         ImGui::TableNextColumn();
         for (int i = 0; i < 36; i++) {
             ImGui::PushID(i);
-            sprintf(buf, "%d", emulator->getGPIO(i));
+            sprintf(buf, "%d", computer->getGPIO(i));
             ImGui::SetNextItemWidth(12);
-            bool output = emulator->getGpioOutput(i);
+            bool output = computer->getGpioOutput(i);
             if (output)
-                ImGui::PushStyleColor(ImGuiCol_Text, emulator->getGPIO(i) ? *outputColor : *breakpointColor);
+                ImGui::PushStyleColor(ImGuiCol_Text, computer->getGPIO(i) ? *outputColor : *breakpointColor);
             if (ImGui::InputText("##", buf, 2, ioFlags | (output ? ImGuiInputTextFlags_ReadOnly : 0)))
-                emulator->getGPIO(i) = buf[0] != '0';
+                computer->getGPIO(i) = buf[0] != '0';
             if (output)
                 ImGui::PopStyleColor();
             if (ImGui::IsItemHovered())
@@ -693,13 +721,13 @@ static void displayPanelGPIO() {
         ImGui::TableNextColumn();
         for (int i = 0; i < 16; i++) {
             ImGui::PushID(i + 36);
-            sprintf(buf, "%d", emulator->getArduinoIO(i));
+            sprintf(buf, "%d", computer->getArduinoIO(i));
             ImGui::SetNextItemWidth(12);
-            bool output = emulator->getArduinoOutput(i);
+            bool output = computer->getArduinoOutput(i);
             if (output)
-                ImGui::PushStyleColor(ImGuiCol_Text, emulator->getArduinoIO(i) ? *outputColor : *breakpointColor);
+                ImGui::PushStyleColor(ImGuiCol_Text, computer->getArduinoIO(i) ? *outputColor : *breakpointColor);
             if (ImGui::InputText("##", buf, 2, ioFlags | (output ? ImGuiInputTextFlags_ReadOnly : 0)))
-                emulator->getArduinoIO(i) = buf[0] != '0';
+                computer->getArduinoIO(i) = buf[0] != '0';
             if (output)
                 ImGui::PopStyleColor();
             if (ImGui::IsItemHovered())
@@ -712,11 +740,11 @@ static void displayPanelGPIO() {
         ImGui::TableNextColumn();
         for (int i = 0; i < 6; i++) {
             ImGui::PushID(i + 52);
-            sprintf(buf, "%x", emulator->getADC(i));
+            sprintf(buf, "%x", computer->getADC(i));
             ImGui::SetNextItemWidth(24);
             if (ImGui::InputText("##", buf, 3, ImGuiInputTextFlags_NoHorizontalScroll
                                                | ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_AlwaysOverwrite | ImGuiInputTextFlags_AutoSelectAll))
-                emulator->getADC(i) = strtol(buf, nullptr, 16);
+                computer->getADC(i) = strtol(buf, nullptr, 16);
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("ADC %d", i);
             ImGui::SameLine();
@@ -735,7 +763,7 @@ static void displayProcessor() {
 
     ImGui::Text("Interrupts:");
     ImGui::SameLine();
-    if ((emulator->getStatus() & FLAG_I))
+    if ((computer->getStatus() & FLAG_I))
         ImGui::TextColored(*outputColor, "enabled");
     else
         ImGui::TextColored(*breakpointColor, "disabled");
@@ -744,23 +772,26 @@ static void displayProcessor() {
     ImGui::NextColumn();
     ImGui::Text("    Halted:");
     ImGui::SameLine();
-    ImGui::TextColored(halted ? *outputColor : *breakpointColor, halted ? "true" : "false");
+    if (fpga ? fpga->isHalted() : halted)
+        ImGui::TextColored(*outputColor, "true");
+    else
+        ImGui::TextColored(*breakpointColor, "false");
 
     // CPU Flags
     ImGui::TextColored(*flagColor, "   Z");
     ImGui::SameLine();
-    ImGui::Text("= %d", (bool)(emulator->getStatus() & FLAG_Z));
+    ImGui::Text("= %d", (bool)(computer->getStatus() & FLAG_Z));
     ImGui::SameLine();
     ImGui::TextColored(*flagColor, "  C");
     ImGui::SameLine();
-    ImGui::Text("= %d", (bool)(emulator->getStatus() & FLAG_C));
+    ImGui::Text("= %d", (bool)(computer->getStatus() & FLAG_C));
     ImGui::TextColored(*flagColor, "   N");
     ImGui::SameLine();
-    ImGui::Text("= %d", (bool)(emulator->getStatus() & FLAG_N));
+    ImGui::Text("= %d", (bool)(computer->getStatus() & FLAG_N));
     ImGui::SameLine();
     ImGui::TextColored(*flagColor, "  V");
     ImGui::SameLine();
-    ImGui::Text("= %d", (bool)(emulator->getStatus() & FLAG_V));
+    ImGui::Text("= %d", (bool)(computer->getStatus() & FLAG_V));
 
     // CPU Registers
     ImGui::Columns(2, "registers");
@@ -772,35 +803,35 @@ static void displayProcessor() {
     // PC
     ImGui::TextColored(*flagColor, "    PC: ");
     ImGui::SameLine();
-    ImGui::Text("$%08X", emulator->getPC());
+    ImGui::Text("$%08X", computer->getPC());
 
     // IE
     ImGui::TextColored(*flagColor, "    IE: ");
     ImGui::SameLine();
-    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(emulator->getIE()));
+    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(computer->getIE()));
 
     // IF
     ImGui::TextColored(*flagColor, "    IF: ");
     ImGui::SameLine();
-    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(emulator->getIF()));
+    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(computer->getIF()));
 
     ImGui::Separator();
 
     for (int i = 0; i <= 13; i++) {
         ImGui::TextColored(*registerColor, i >= 10 ? "    R%d:" : "    R%d: ", i);
         ImGui::SameLine();
-        ImGui::Text("$%08X", emulator->getReg(i));
+        ImGui::Text("$%08X", computer->getReg(i));
     }
 
     // FP
     ImGui::TextColored(*flagColor, "    FP: ");
     ImGui::SameLine();
-    ImGui::Text("$%08X", emulator->getFP());
+    ImGui::Text("$%08X", computer->getFP());
 
     // SP
     ImGui::TextColored(*flagColor, "    SP: ");
     ImGui::SameLine();
-    ImGui::Text("$%08X", emulator->getSP());
+    ImGui::Text("$%08X", computer->getSP());
 
     ImGui::End();
 }
@@ -819,10 +850,10 @@ static void displayDisassembly() {
             for (auto const &entry: debugProgramLabels)
                 if (entry.second == instruction.address)
                     ImGui::Text("%s:", entry.first.c_str());
-            ImGui::PushStyleColor(ImGuiCol_Text, emulator->getPC() == instruction.address ? *flagColor : *windowColor);
+            ImGui::PushStyleColor(ImGuiCol_Text, computer->getPC() == instruction.address ? *flagColor : *windowColor);
             ImGui::TextUnformatted(instruction.assembly.c_str());
             ImGui::PopStyleColor();
-            if (emulator->getPC() == instruction.address and disassemblerJumpToPC)
+            if (computer->getPC() == instruction.address and disassemblerJumpToPC)
                 ImGui::SetScrollHereY();
             previousEnd = instruction.address + instruction.size;
         }
@@ -856,16 +887,16 @@ static std::string getVarValue(const DebugVariable &variable, uint32_t address) 
         case 'i':
             switch (variable.type_size) {
                 case 1:
-                    string += stringFormat("%i", *(int8_t *) &emulator->getMemory()[address]);
+                    string += stringFormat("%i", *(int8_t *) &computer->getMemory()[address]);
                     break;
                 case 2: {
-                    uint16_t result = reverseHalfWordBytes(*(uint16_t *) &emulator->getMemory()[address]);
+                    uint16_t result = reverseHalfWordBytes(*(uint16_t *) &computer->getMemory()[address]);
                     string += stringFormat("%i", *(int16_t *) &result);
                     break;
                 }
                 default:
                 case 4: {
-                    uint32_t result = reverseWordBytes(*(int32_t *) &emulator->getMemory()[address]);
+                    uint32_t result = reverseWordBytes(*(int32_t *) &computer->getMemory()[address]);
                     string += stringFormat("%i", *(int32_t *) &result);
                     break;
                 }
@@ -874,14 +905,14 @@ static std::string getVarValue(const DebugVariable &variable, uint32_t address) 
         case 'u':
             switch (variable.type_size) {
                 case 1:
-                    string += stringFormat("%u", *(uint8_t *) &emulator->getMemory()[address]);
+                    string += stringFormat("%u", *(uint8_t *) &computer->getMemory()[address]);
                     break;
                 case 2:
-                    string += stringFormat("%u", reverseHalfWordBytes(*(uint16_t *) &emulator->getMemory()[address]));
+                    string += stringFormat("%u", reverseHalfWordBytes(*(uint16_t *) &computer->getMemory()[address]));
                     break;
                 default:
                 case 4:
-                    string += stringFormat("%u", reverseWordBytes(*(uint32_t *) &emulator->getMemory()[address]));
+                    string += stringFormat("%u", reverseWordBytes(*(uint32_t *) &computer->getMemory()[address]));
                     break;
             }
             break;
@@ -895,19 +926,25 @@ static std::string getVarValue(const DebugVariable &variable, uint32_t address) 
 static void insertTableVariable(const std::string &name, const DebugVariable &variable, uint32_t fp, bool local = false) {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
+
+    uint32_t address = local ? fp + variable.address : variable.address;
+
     ImGui::TextUnformatted(name.c_str());
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        ImGui::Text("[0x%x]", address);
+        ImGui::EndTooltip();
+    }
     ImGui::TableNextColumn();
     ImGui::TextUnformatted(getVarType(variable).c_str());
     ImGui::TableNextColumn();
 
-    uint32_t address = local ? fp + variable.address : variable.address;
-
     if (variable.pointer) {
-        uint32_t value = reverseWordBytes(*(uint32_t *) &emulator->getMemory()[address]);
+        uint32_t value = reverseWordBytes(*(uint32_t *) &computer->getMemory()[address]);
         ImGui::Text("0x%x (%s)", value, getVarValue(variable, value).c_str());
         if (variable.type_size == 1 and variable.type[0] == 'i' and value < 0x20000 and ImGui::IsItemHovered()) {
             ImGui::BeginTooltip();
-            ImGui::Text("%.100s", emulator->getMemory() + value);
+            ImGui::Text("%.100s", computer->getMemory() + value);
             ImGui::EndTooltip();
         }
     } else if (variable.array) {
@@ -915,7 +952,7 @@ static void insertTableVariable(const std::string &name, const DebugVariable &va
         if (variable.type_size == 1 and variable.type[0] == 'i' and ImGui::IsItemHovered()) {
             ImGui::BeginTooltip();
             ImGui::PushTextWrapPos(ImGui::GetFontSize() * 100.0f);
-            ImGui::Text("%.*s", variable.array, emulator->getMemory() + address);
+            ImGui::Text("%.*s", variable.array, computer->getMemory() + address);
             ImGui::PopTextWrapPos();
             ImGui::EndTooltip();
         }
@@ -952,19 +989,19 @@ int getCurrentLine(uint32_t pc, std::string &currentSource) {
 }
 
 static void displayFunctions() {
-    uint32_t pc = emulator->getPC();
-    uint32_t fp = emulator->getFP();
+    uint32_t pc = computer->getPC();
+    uint32_t fp = computer->getFP();
 
     if (windowStates[WINDOW_CALLS]) {
         if (ImGui::Begin(WINDOW_CALLS, &windowStates[WINDOW_CALLS])) {
-            uint32_t frame = emulator->getFP();
-            uint32_t address = emulator->getPC();
+            uint32_t frame = computer->getFP();
+            uint32_t address = computer->getPC();
             int watchdog = 0;
             if (debugDataLabels.count("_stack") > 0) {
                 static uint32_t previousPC = 0;
                 static int selected = 0;
                 int count = 0;
-                if (previousPC != emulator->getPC())
+                if (previousPC != computer->getPC())
                     selected = 0;
                 while (frame >= debugDataLabels["_stack"] and frame <= 0x20000 and address <= 0x20000 and watchdog++ < 1000) {
                     bool found = false;
@@ -984,10 +1021,10 @@ static void displayFunctions() {
                         }
                     if (!found)
                         break;
-                    address = reverseWordBytes(*(uint32_t *) &emulator->getMemory()[frame - 8]) - 8;
-                    frame = reverseWordBytes(*(uint32_t *) &emulator->getMemory()[frame - 4]);
+                    address = reverseWordBytes(*(uint32_t *) &computer->getMemory()[frame - 8]) - 8;
+                    frame = reverseWordBytes(*(uint32_t *) &computer->getMemory()[frame - 4]);
                 }
-                previousPC = emulator->getPC();
+                previousPC = computer->getPC();
             }
         }
         ImGui::End();
@@ -1021,12 +1058,18 @@ static void displayFunctions() {
                                     auto center = ImVec2((ImGui::GetItemRectMax().x + ImGui::GetItemRectMin().x) / 2,
                                                          (ImGui::GetItemRectMax().y + ImGui::GetItemRectMin().y) / 2);
                                     if (breakpoints.count(statement.address)) {
-                                        if (pressed)
+                                        if (pressed) {
                                             breakpoints.erase(statement.address);
+                                            if (fpga)
+                                                fpga->clearBreakpoint(statement.address);
+                                        }
                                         draw_list->AddCircleFilled(center, 5, ImColor(*breakpointColor));
                                     } else {
-                                        if (pressed)
+                                        if (pressed and (!fpga or breakpoints.size() < 5)) {
                                             breakpoints.emplace(statement.address);
+                                            if (fpga)
+                                                fpga->addBreakpoint(statement.address);
+                                        }
                                         draw_list->AddCircle(center, 5, ImColor(*flagColor));
                                     }
                                     isStatement = true;
@@ -1105,7 +1148,7 @@ static void displayVariables() {
         for (const auto &variable: debugVariables) {
             if (variable.second.address >= 0x20000)
                 continue;
-            insertTableVariable(variable.first, variable.second, emulator->getFP());
+            insertTableVariable(variable.first, variable.second, computer->getFP());
         }
         ImGui::EndTable();
     }
@@ -1122,6 +1165,8 @@ static void displayBreakpoints() {
     for (auto breakpoint: breakpoints) {
         ImGui::PushID((int)breakpoint);
         if (ImGui::Button("X")) {
+            if (fpga)
+                fpga->clearBreakpoint(breakpoint);
             breakpoints.erase(breakpoint);
             ImGui::PopID();
             break;
@@ -1137,14 +1182,24 @@ static void displayBreakpoints() {
 
     ImGui::SameLine();
     if (ImGui::Button("Add") and breakpointText[0] != 0) {
-        breakpoints.insert(strtol(breakpointText, nullptr, 16));
-        breakpointText[0] = 0; // Set first character to null to clear string
+        if (!fpga or breakpoints.size() < 5) {
+            auto value = strtol(breakpointText, nullptr, 16);
+            if (fpga and enableBreakpoints)
+                fpga->addBreakpoint(value);
+            breakpoints.insert(value);
+            breakpointText[0] = 0; // Set first character to null to clear string
+        }
     }
 
-    if (ImGui::Button("Clear"))
+    if (ImGui::Button("Clear")) {
+        if (fpga)
+            for (auto breakpoint: breakpoints)
+                fpga->clearBreakpoint(breakpoint);
         breakpoints.clear();
+    }
     ImGui::SameLine();
-    ImGui::Checkbox("Enable", &enableBreakpoints);
+    if (ImGui::Checkbox("Enable", &enableBreakpoints))
+        updateDebuggerBreakpoints();
     ImGui::End();
 }
 
@@ -1156,14 +1211,14 @@ static void displayTimers() {
 
     ImGui::TextColored(*flagColor, "IE:");
     ImGui::SameLine();
-    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(emulator->getTimerIE()));
+    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(computer->getTimerIE()));
 
     ImGui::TextColored(*flagColor, "IF:");
     ImGui::SameLine();
-    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(emulator->getTimerIF()));
+    ImGui::Text(BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(computer->getTimerIF()));
 
     for (int i = 0; i < 8; i++) {
-        auto &timer = emulator->getTimer(i);
+        auto &timer = computer->getTimer(i);
         ImGui::TextColored(timer.enabled ? *outputColor : *breakpointColor, "Timer%d:", i);
         ImGui::SameLine();
         ImGui::Text("%s/%u/%u (%u)", timer.repeat ? "(R) " : "", timer.divider, timer.compare, (uint32_t)timer.count);
@@ -1179,9 +1234,9 @@ static void displayPWM() {
     ImGui::Begin(WINDOW_PWM, &windowStates[WINDOW_PWM]);
 
     for (int i = 0; i < 8; i++) {
-        ImGui::TextColored(emulator->getPWMEnabled(i) ? *outputColor : *breakpointColor, "Ch%d:", i);
+        ImGui::TextColored(computer->getPWMEnabled(i) ? *outputColor : *breakpointColor, "Ch%d:", i);
         ImGui::SameLine();
-        ImGui::Text("%d", emulator->getPWMDuty(i));
+        ImGui::Text("%d", computer->getPWMDuty(i));
     }
 
     ImGui::End();
@@ -1194,13 +1249,13 @@ static void drawTileToBuffer(int tile, int x, int y, int textureWidth, int textu
             break;
         if (pixelY < 0)
             continue;
-        uint32_t data = emulator->getTileData(tile, row);
+        uint32_t data = computer->getTileData(tile, row);
         for (int column = 7; column >= 0; column--) {
             int pixelX = x + column;
             if (pixelX >= textureWidth)
                 break;
             if (pixelX >= 0)
-                buffer[textureWidth * pixelY + pixelX] = emulator->getPaletteColor((int)(data & 0xF));
+                buffer[textureWidth * pixelY + pixelX] = computer->getPaletteColor((int)(data & 0xF));
             data >>= 4;
         }
     }
@@ -1223,9 +1278,9 @@ static void displayVRAM() {
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Background", nullptr, ImGuiTabItemFlags_None)) {
-            ImGui::Text("Background Scroll: (%i, %i)", emulator->getHorizontalScroll(), emulator->getVerticalScroll());
+            ImGui::Text("Background Scroll: (%i, %i)", computer->getHorizontalScroll(), computer->getVerticalScroll());
             for (int i = 0; i < 64 * 64; i++)
-                drawTileToBuffer(emulator->getBackgroundData(i), (i % 64) * 8, (i / 64) * 8, WORLD_WIDTH, WORLD_HEIGHT, buffer);
+                drawTileToBuffer(computer->getBackgroundData(i), (i % 64) * 8, (i / 64) * 8, WORLD_WIDTH, WORLD_HEIGHT, buffer);
             updateTexture(vramTexture, WORLD_WIDTH, WORLD_HEIGHT, reinterpret_cast<uint8_t *>(buffer));
             ImGui::BeginChild("BackgroundView", ImVec2(ImGui::GetWindowWidth() - 10, ImGui::GetWindowHeight() - 80),false,ImGuiWindowFlags_HorizontalScrollbar);
             ImGui::BeginChild("BackgroundClipping", {WORLD_WIDTH, WORLD_HEIGHT}, false);
@@ -1233,7 +1288,7 @@ static void displayVRAM() {
             ImGui::Image((ImTextureID)(intptr_t)vramTexture, ImVec2(WORLD_WIDTH, WORLD_HEIGHT));
             auto start = ImGui::GetItemRectMin();
             for (int i = 0; i < 4; i++) {
-                auto pos = ImVec2(start.x + (float)emulator->getHorizontalScroll(), start.y + (float)emulator->getVerticalScroll());
+                auto pos = ImVec2(start.x + (float)computer->getHorizontalScroll(), start.y + (float)computer->getVerticalScroll());
                 if (i & 1)
                     pos.x += WORLD_WIDTH;
                 if (i & 2)
@@ -1245,9 +1300,9 @@ static void displayVRAM() {
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Window", nullptr, ImGuiTabItemFlags_None)) {
-            ImGui::Text("Window Position: (%u, %u)", emulator->getWindowX(), emulator->getWindowY());
+            ImGui::Text("Window Position: (%u, %u)", computer->getWindowX(), computer->getWindowY());
             for (int i = 0; i < 30 * 40; i++)
-                drawTileToBuffer(emulator->getWindowData(i), (i % 40) * 8, (i / 40) * 8, DISPLAY_WIDTH, DISPLAY_HEIGHT, buffer);
+                drawTileToBuffer(computer->getWindowData(i), (i % 40) * 8, (i / 40) * 8, DISPLAY_WIDTH, DISPLAY_HEIGHT, buffer);
             updateTexture(vramTexture, DISPLAY_WIDTH, DISPLAY_HEIGHT, reinterpret_cast<uint8_t *>(buffer));
             ImGui::Image((ImTextureID)(intptr_t)vramTexture, ImVec2(DISPLAY_WIDTH, DISPLAY_HEIGHT));
             ImGui::EndTabItem();
@@ -1255,7 +1310,7 @@ static void displayVRAM() {
         if (ImGui::BeginTabItem("Sprites", nullptr, ImGuiTabItemFlags_None)) {
             ImGui::BeginChild("SpritesView", ImVec2(ImGui::GetWindowWidth() - 10, ImGui::GetWindowHeight() - 60),false,ImGuiWindowFlags_HorizontalScrollbar);
             for (int i = 0; i < 64; i++) {
-                const Sprite &sprite = emulator->getSprite(i);
+                const Sprite &sprite = computer->getSprite(i);
                 ImGui::Text("Sprite %2i: X: %3i, Y: %3i, Tile: %3i, Mirror: %s%s", i, sprite.x, sprite.y, sprite.firstTile,
                             sprite.horizontalFlip ? "h" : "-", sprite.verticalFlip ? "v" : "-");
             }
@@ -1275,7 +1330,7 @@ static void displayAPU() {
     ImGui::Begin(WINDOW_APU, &windowStates[WINDOW_APU], ImGuiWindowFlags_None);
 
     for (int i = 0; i < SQUARE_CHANNELS; i++) {
-        const auto &channel = emulator->getSquareChannel(i);
+        const auto &channel = computer->getSquareChannel(i);
         ImGui::Text("Channel %i: Period: %u, %s, Duration: %u, Volume: %u", i, channel.period, channel.finite ? "Finite" : "Infinite", channel.duration, channel.volume);
     }
 
@@ -1284,21 +1339,42 @@ static void displayAPU() {
 
 static void handleShortcuts() {
     if (ImGui::IsKeyDown(SDL_SCANCODE_LCTRL)) {
-        if (ImGui::IsKeyPressed(SDL_SCANCODE_P, false))
-            paused ^= 1;
+        if (!fpga) {
+            if (ImGui::IsKeyPressed(SDL_SCANCODE_P, false))
+                paused ^= 1;
 #ifndef __EMSCRIPTEN__
-        if (ImGui::IsKeyPressed(SDL_SCANCODE_O, false))
-            ImGuiFileDialog::Instance()->OpenDialog("ChooseROM", "Choose ROM", ".bin", ".");
+            if (ImGui::IsKeyPressed(SDL_SCANCODE_O, false))
+                ImGuiFileDialog::Instance()->OpenDialog("ChooseROM", "Choose ROM", ".bin", ".");
 #endif
-        if (ImGui::IsKeyPressed(SDL_SCANCODE_B, false))
-            enableBreakpoints ^= 1;
-        if (ImGui::IsKeyPressed(SDL_SCANCODE_Z, true) and !halted and paused)
-            stepBreakpoint = true;
-        if (ImGui::IsKeyPressed(SDL_SCANCODE_X, true) and !halted and paused and !debugFunctions.empty())
-            stepBreakpointC = true;
+            if (ImGui::IsKeyPressed(SDL_SCANCODE_B, false))
+                enableBreakpoints ^= 1;
+            if (ImGui::IsKeyPressed(SDL_SCANCODE_Z, true) and !halted and paused)
+                stepBreakpoint = true;
+            if (ImGui::IsKeyPressed(SDL_SCANCODE_X, true) and !halted and paused and !debugFunctions.empty())
+                stepBreakpointC = true;
+        } else {
+            if (ImGui::IsKeyPressed(SDL_SCANCODE_M, true))
+                fpga->updateMemory();
+            if (ImGui::IsKeyPressed(SDL_SCANCODE_N, true))
+                fpga->updateRegisters();
+            if (ImGui::IsKeyPressed(SDL_SCANCODE_U, false)) {
+                fpga->getAutoUpdate() ^= 1;
+                fpga->updateMemory();
+                fpga->updateRegisters();
+            }
+            if (ImGui::IsKeyPressed(SDL_SCANCODE_P, false))
+                fpga->pause();
+            if (ImGui::IsKeyPressed(SDL_SCANCODE_B, false)) {
+                enableBreakpoints ^= 1;
+                updateDebuggerBreakpoints();
+            }
+            if (ImGui::IsKeyPressed(SDL_SCANCODE_Z, true))
+                fpga->step();
+        }
         if (ImGui::IsKeyPressed(SDL_SCANCODE_R, false)) {
             halted = false;
-            emulator->reset();
+            computer->reset();
+            updateDebuggerBreakpoints();
         }
     }
 }
@@ -1307,14 +1383,14 @@ static void runEmulator() {
     if (!halted and (!paused or stepBreakpoint or stepBreakpointC)) {
         for (int i = 0; i < 16667 / (1 << processorSpeeds[processorSpeed]); i++) {
             if (controllerPeripheral) {
-                if (!emulator->getGpioOutput(0))
-                    emulator->getGPIO(0) = ImGui::IsKeyDown(SDL_SCANCODE_W) or ImGui::IsKeyDown(SDL_SCANCODE_UP);
-                if (!emulator->getGpioOutput(1))
-                    emulator->getGPIO(1) = ImGui::IsKeyDown(SDL_SCANCODE_S) or ImGui::IsKeyDown(SDL_SCANCODE_DOWN);
-                if (!emulator->getGpioOutput(2))
-                    emulator->getGPIO(2) = ImGui::IsKeyDown(SDL_SCANCODE_A) or ImGui::IsKeyDown(SDL_SCANCODE_LEFT);
-                if (!emulator->getGpioOutput(3))
-                    emulator->getGPIO(3) = ImGui::IsKeyDown(SDL_SCANCODE_D) or ImGui::IsKeyDown(SDL_SCANCODE_RIGHT);
+                if (!computer->getGpioOutput(0))
+                    computer->getGPIO(0) = ImGui::IsKeyDown(SDL_SCANCODE_W) or ImGui::IsKeyDown(SDL_SCANCODE_UP);
+                if (!computer->getGpioOutput(1))
+                    computer->getGPIO(1) = ImGui::IsKeyDown(SDL_SCANCODE_S) or ImGui::IsKeyDown(SDL_SCANCODE_DOWN);
+                if (!computer->getGpioOutput(2))
+                    computer->getGPIO(2) = ImGui::IsKeyDown(SDL_SCANCODE_A) or ImGui::IsKeyDown(SDL_SCANCODE_LEFT);
+                if (!computer->getGpioOutput(3))
+                    computer->getGPIO(3) = ImGui::IsKeyDown(SDL_SCANCODE_D) or ImGui::IsKeyDown(SDL_SCANCODE_RIGHT);
             }
 
             if (keypadPeripheral) {
@@ -1325,13 +1401,11 @@ static void runEmulator() {
                     SDL_SCANCODE_4, SDL_SCANCODE_R, SDL_SCANCODE_F, SDL_SCANCODE_V
                 };
                 for (int j = 0; j < 16; j++)
-                    if (!emulator->getGpioOutput(j))
-                        emulator->getGPIO(j) = ImGui::IsKeyDown(KEYPAD_KEYS[j]);
+                    if (!computer->getGpioOutput(j))
+                        computer->getGPIO(j) = ImGui::IsKeyDown(KEYPAD_KEYS[j]);
             }
 
-            emulator->fixedUpdate(1 << processorSpeeds[processorSpeed]);
-
-            if (emulator->run()) {
+            if (computer->run(1 << processorSpeeds[processorSpeed])) {
                 halted = true;
                 break;
             }
@@ -1339,7 +1413,7 @@ static void runEmulator() {
             bool broken = false;
             if (enableBreakpoints)
                 for (auto breakpoint: breakpoints)
-                    if (emulator->getPC() == breakpoint) {
+                    if (computer->getPC() == breakpoint) {
                         broken = true;
                         break;
                     }
@@ -1358,11 +1432,11 @@ static void runEmulator() {
                 static std::string previousSource;
                 static uint32_t previousFP;
                 std::string newSource;
-                int newLine = getCurrentLine(emulator->getPC(), newSource);
-                if ((previousLine != newLine or previousSource != newSource or previousFP != emulator->getFP()) and newLine != 0 and !newSource.empty()) {
+                int newLine = getCurrentLine(computer->getPC(), newSource);
+                if ((previousLine != newLine or previousSource != newSource or previousFP != computer->getFP()) and newLine != 0 and !newSource.empty()) {
                     previousSource = newSource;
                     previousLine = newLine;
-                    previousFP = emulator->getFP();
+                    previousFP = computer->getFP();
                     stepBreakpointC = false;
                     break;
                 }
@@ -1376,7 +1450,7 @@ void audioCallback(void *userdata, uint8_t *buffer, int len) {
     if (halted or paused)
         memset(buffer, 0, len);
     else
-        emulator->sampleAudio((float *) buffer, len / 4);
+        computer->sampleAudio((float *) buffer, len / 4);
 }
 
 static void mainLoop(void *arg) {
@@ -1398,7 +1472,10 @@ static void mainLoop(void *arg) {
 
     handleShortcuts();
 
-    runEmulator();
+    if (fpga)
+        computer->run(0);
+    else
+        runEmulator();
 
     // Ensure windows are all registered
     {
@@ -1458,9 +1535,8 @@ static void mainLoop(void *arg) {
 }
 
 int main(int argc, char* argv[]) {
-    emulator = new Emulator();
-
 #ifdef __EMSCRIPTEN__
+    computer = new Emulator();
     controllerPeripheral = true;
     loadRom("Tetris.bin");
 #else
@@ -1469,6 +1545,7 @@ int main(int argc, char* argv[]) {
     options.add_options()
         ("r,rom", "Program ROM", cxxopts::value<std::string>())
         ("d,debug", "Debug symbols file", cxxopts::value<std::string>())
+        ("f,fpga", "FPGA mode")
         ("h,help", "Print usage")
     ;
     auto result = options.parse(argc, argv);
@@ -1476,6 +1553,11 @@ int main(int argc, char* argv[]) {
         std::cout << options.help() << std::endl;
         return 0;
     }
+    if (result.count("fpga")) {
+        fpga = new FPGA();
+        computer = fpga;
+    } else
+        computer = new Emulator();
     if (!result.count("rom"))
         paused = true;
     else if (!loadRom(result["rom"].as<std::string>()))
@@ -1554,6 +1636,11 @@ int main(int argc, char* argv[]) {
     // Create ImGui windows
     ramEditor = new MemoryEditor();
     ramEditor->Open = true;
+    ramEditor->WriteFn = [](ImU8* data, size_t off, ImU8 d) {
+        data[off] = d;
+        if (fpga)
+            fpga->writeMemory(off);
+    };
     romViewer = new MemoryEditor();
     romViewer->Open = true;
     romViewer->ReadOnly = true;

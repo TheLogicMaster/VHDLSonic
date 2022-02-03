@@ -1,24 +1,33 @@
 #include <iostream>
-#include <cstring>
 #include <bitset>
-#include <ctime>
 #include <cmath>
 
 #include "Emulator.h"
 #include "Utilities.h"
 
-Emulator::Emulator() {
-    srand(time(nullptr));
-    rom = memory;
-    ram = memory + 0x18000;
-}
+int Emulator::run(int delta) {
+    apu.update(delta);
 
-void Emulator::load(uint8_t *romData, long size) {
-    memset(rom, 0, 0x18000);
-    memcpy(rom, romData, std::min(size, 0x18000l));
-}
+    for (int i = 0; i < 8; i++) {
+        auto &timer = timers[i];
 
-int Emulator::run() {
+        if (timer.divider == 0 or !timer.enabled)
+            continue;
+
+        timer.ticks += 50 * delta;
+        timer.count += timer.ticks / timer.divider;
+        timer.ticks %= timer.divider;
+        if (timer.count >= timer.compare) {
+            timer.count = 0;
+            timerInterruptFlags |= 1 << i;
+            if (!timer.repeat)
+                timer.enabled = false;
+        }
+    }
+
+    if (timerInterruptEnable & timerInterruptFlags)
+        interruptFlags |= 1 << 4;
+
     if (interruptFlags & 1) {
         reset();
         return 0;
@@ -315,6 +324,7 @@ int Emulator::run() {
             status = readUint8(registers[15]);
             break;
         case 0x4C: // Halt
+            pc -= 4;
             return 1;
     }
 
@@ -322,58 +332,10 @@ int Emulator::run() {
 }
 
 void Emulator::reset() {
-    pc = 0;
-    status = 0;
-    interruptEnable = 0;
-    interruptFlags = 0;
-    memset(ram, 0, 0x8000);
-    memset(lights, 0, 10);
-    memset(sevenSegmentDisplays, 0, 6);
-    memset(registers, 0, 16 * 4);
-    for (int i = 0; i < 36; i++)
-        if (gpioOutput[i])
-            gpio[i] = false;
-    memset(gpioOutput, 0, 36);
-    for (int i = 0; i < 16; i++)
-        if (arduinoOutput[i])
-            arduinoIO[i] = false;
-    memset(arduinoOutput, 0, 16);
-    std::queue<uint8_t>().swap(uartInBuffer);
-
-    for (auto &timer : timers)
-        timer = {};
-    timerInterruptEnable = 0;
-    timerInterruptFlags = 0;
-
-    memset(pwmEnabled, 0, 8);
-    memset(pwmDuty, 0, 8);
+    Computer::reset();
 
     gpu.reset();
     apu.reset();
-}
-
-void Emulator::fixedUpdate(int delta) {
-    apu.update(delta);
-
-    for (int i = 0; i < 8; i++) {
-        auto &timer = timers[i];
-
-        if (timer.divider == 0 or !timer.enabled)
-            continue;
-
-        timer.ticks += 50 * delta;
-        timer.count += timer.ticks / timer.divider;
-        timer.ticks %= timer.divider;
-        if (timer.count >= timer.compare) {
-            timer.count = 0;
-            timerInterruptFlags |= 1 << i;
-            if (!timer.repeat)
-                timer.enabled = false;
-        }
-    }
-
-    if (timerInterruptEnable & timerInterruptFlags)
-        interruptFlags |= 1 << 4;
 }
 
 uint8_t *Emulator::getDisplayBuffer() {
@@ -382,74 +344,6 @@ uint8_t *Emulator::getDisplayBuffer() {
 
 void Emulator::sampleAudio(float *buffer, int samples) {
     apu.sample(buffer, samples);
-}
-
-std::string &Emulator::getPrintBuffer() {
-    return printBuffer;
-}
-
-void Emulator::uartReceive(char* bytes, uint8_t length) {
-    for (int i = 0; i < length; i++) {
-        if (uartInBuffer.size() >= 255)
-            break;
-        uartInBuffer.push(bytes[i]);
-    }
-}
-
-bool &Emulator::getSwitch(int id) {
-    return switches[id];
-}
-
-bool &Emulator::getButton(int id) {
-    return buttons[id];
-}
-
-bool Emulator::getLight(int id) {
-    return lights[id];
-}
-
-uint8_t Emulator::getSevenSegmentDisplay(int id) {
-    return sevenSegmentDisplays[id];
-}
-
-bool &Emulator::getGPIO(int id) {
-    return gpio[id];
-}
-
-bool &Emulator::getArduinoIO(int id) {
-    return arduinoIO[id];
-}
-
-uint8_t &Emulator::getADC(int id) {
-    return analogDigitalConverters[id];
-}
-
-bool Emulator::getGpioOutput(int id) {
-    return gpioOutput[id];
-}
-
-bool Emulator::getArduinoOutput(int id) {
-    return arduinoOutput[id];
-}
-
-uint8_t Emulator::getTimerIE() const {
-    return timerInterruptEnable;
-}
-
-uint8_t Emulator::getTimerIF() const {
-    return timerInterruptFlags;
-}
-
-uint8_t Emulator::getPWMDuty(int id) {
-    return pwmDuty[id];
-}
-
-bool Emulator::getPWMEnabled(int id) {
-    return pwmEnabled[id];
-}
-
-Timer &Emulator::getTimer(int id) {
-    return timers[id];
 }
 
 bool Emulator::isRendering() const {
@@ -494,46 +388,6 @@ const Sprite &Emulator::getSprite(int index) const {
 
 const SquareChannel &Emulator::getSquareChannel(int channel) {
     return apu.getSquareChannel(channel);
-}
-
-uint8_t *Emulator::getMemory() {
-    return memory;
-}
-
-uint8_t *Emulator::getRAM() {
-    return ram;
-}
-
-uint8_t *Emulator::getROM() {
-    return rom;
-}
-
-uint32_t Emulator::getReg(uint8_t reg) const {
-    return registers[reg];
-}
-
-uint32_t Emulator::getPC() const {
-    return pc;
-}
-
-uint8_t Emulator::getIE() const {
-    return interruptEnable;
-}
-
-uint8_t Emulator::getIF() const {
-    return interruptFlags;
-}
-
-uint32_t Emulator::getFP() const {
-    return registers[14];
-}
-
-uint32_t Emulator::getSP() const {
-    return registers[15];
-}
-
-uint8_t Emulator::getStatus() const {
-    return status;
 }
 
 uint32_t Emulator::readMicrocontroller(uint32_t address) {
