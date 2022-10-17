@@ -203,6 +203,26 @@ draw_text_done_:
     ret
 
 
+; Clears Tile data
+clear_tile_data:
+    push r0
+    push r1
+    push r2
+
+    ldr r0,0
+    ldr r1,2048
+    ldr r2,{tile_data}
+clear_tile_data_loop_:
+    str r0,r2++
+    dec r1
+    bne clear_tile_data_loop_
+
+    pop r2
+    pop r1
+    pop r0
+    ret
+
+
 ; Clears BG data
 clear_bg_data:
     push r0
@@ -218,6 +238,43 @@ clear_bg_data_loop_:
     bne clear_bg_data_loop_
 
     pop r2
+    pop r1
+    pop r0
+    ret
+
+
+; Clears Window data
+clear_win_data:
+    push r0
+    push r1
+    push r2
+
+    ldr r0,0
+    ldr r1,1200
+    ldr r2,{win_data}
+clear_win_data_loop_:
+    str r0,r2++
+    dec r1
+    bne clear_win_data_loop_
+
+    pop r2
+    pop r1
+    pop r0
+    ret
+
+
+; Clears sprites
+clear_sprites:
+    push r0
+    push r1
+
+    ldr r0,64
+    ldr r1,0
+clear_sprites_loop_:
+    str r1,r0,{sprites}
+    dec r0
+    bne clear_sprites_loop_
+
     pop r1
     pop r0
     ret

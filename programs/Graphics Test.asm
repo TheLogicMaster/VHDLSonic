@@ -24,6 +24,10 @@ main:
     sei
 
     ldr r0,face
+    ldr r1,0
+    jsr copy_tile
+
+    ldr r0,face
     ldr r1,1
     jsr copy_tile
 
@@ -42,7 +46,7 @@ main:
 
 ;    jsr debug_tiles
 
-; Set BG tile 0-4 to to tile index 1-5
+; Set BG tile 0-4 to to tile index 0-4
     ldr r0,0
     ldr x,{bg_data}
     str r0,x++
@@ -75,6 +79,6 @@ face: bin "data/tiles/face.bin"
 face_sprite: bin "data/tiles/face_sprite.bin"
 
     data
-    var[4] ; Padding to prevent memory boundary issues
+    align 4
 ; Program stack
 stack:

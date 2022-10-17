@@ -2,10 +2,10 @@
 
     include "Sonic.asm"
 
-    ifndef scl=$40168
-    ifndef sda=$4016C
-    ifndef scl_out=$401A8
-    ifndef sda_out=$401AC
+    ifndef scl=$400B8
+    ifndef sda=$400BC
+    ifndef scl_out=$40148
+    ifndef sda_out=$4014C
 
 
 ; Starts an I2C write mode transmission to address r0

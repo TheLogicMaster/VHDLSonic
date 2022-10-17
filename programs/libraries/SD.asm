@@ -2,7 +2,7 @@
 
 ; Reference: https://github.com/arduino-libraries/SD/blob/master/src/utility/Sd2Card.cpp
 
-    def sd_cs=$3C
+    ifndef sd_cs=52
 
     include "Software SPI.asm"
 

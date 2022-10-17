@@ -21,6 +21,18 @@ int size;
 int can_render;
 char segments[62];
 
+//int poll_controls() {
+//    if (GPIO[13]) // D
+//        return 1;
+//    if (GPIO[11]) // S
+//        return 2;
+//    if (GPIO[12]) // A
+//        return 3;
+//    if (GPIO[10]) // W
+//        return 4;
+//    return 0;
+//}
+
 int poll_controls() {
     if (GPIO[3]) // D
         return 1;
@@ -85,7 +97,7 @@ void snake_game() {
         can_render = 1;
 
         // Movement delay
-        for(int i = 0; i < 5000; i++) {
+        for(int i = 0; i < 1500; i++) {
             int polled = poll_controls();
             if (polled && (!input || polled - 1 != (input - 1 + 2) % 4))
                 input = polled;

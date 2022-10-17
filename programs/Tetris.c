@@ -163,6 +163,18 @@ int y;
 int rotation;
 char grid[GRID_HEIGHT][GRID_WIDTH];
 
+//int poll_controls() {
+//    if (GPIO[13]) // D
+//        return 1;
+//    if (GPIO[11]) // S
+//        return 2;
+//    if (GPIO[12]) // A
+//        return 3;
+//    if (GPIO[10]) // W
+//        return 4;
+//    return 0;
+//}
+
 int poll_controls() {
     if (GPIO[3]) // D
         return 1;

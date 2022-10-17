@@ -36,24 +36,32 @@ end entity;
 architecture impl of lcd_driver is
 	signal lcd_state : integer range 0 to 63;
 	signal lcd_count : unsigned(24 downto 0);
+	signal lcd_clock : std_logic;
 begin
 	pixel_x <= std_logic_vector(resize((lcd_count - 20 - 64 * 4 - 2) / 4, 10));
---	sprite_index <= std_logic_vector(resize((h_cnt - 21) / 2, 6));
---	sprite_cache_index <= std_logic_vector(resize(h_cnt, 6));
---	sprite_cache_write <= '1' when h_cnt >= 22 and h_cnt < 22 + 64 * 2 else '0';
---	sprite_cache_clear <= '1' when h_cnt >= 0 and h_cnt < 20 else '0';
---	bg_x <= pixel_x;--std_logic_vector(resize((h_cnt - (96 + 48)) / 2, 10));
-	sprite_index <= std_logic_vector(resize((lcd_count - 20 - 4) / 4, 6));
+--	pixel_x <= std_logic_vector(resize((lcd_count - 20 - 64 * 4 - 2 + 4) / 4, 10));
+	sprite_index <= std_logic_vector(resize((lcd_count - 20 - 4) / 4, 6) + 1);
 	sprite_cache_index <= std_logic_vector(resize(lcd_count, 6));
 	bg_x <= std_logic_vector(resize((lcd_count - 20 - 64 * 4 - 2 + 3) / 4, 10));
-	sprite_cache_write <= '1' when lcd_count >= 20 and lcd_count < 20 + 64 * 4 else '0';
+--	bg_x <= std_logic_vector(resize((lcd_count - 20 - 64 * 4 - 2 + 7) / 4, 10));
+	sprite_cache_write <= '1' when lcd_count >= 20 and lcd_count < 20 + 64 * 4 - 2 else '0';
+	
 	sprite_cache_clear <= '1' when lcd_count < 20 else '0';
-	bg_y <= pixel_y;--std_logic_vector(resize((v_cnt - 11) / 2, 9));
+	bg_y <= pixel_y;
 	blanking <= '1' when lcd_state = 22 else '0';
 	ticks <= std_logic_vector(lcd_count(1 downto 0));
 	
 	vblank <= '1' when lcd_state = 22 and lcd_count = 0 and paused = '0' else '0';
 	hblank <= '1' when lcd_state = 20 and lcd_count = 0 and paused = '0' else '0';
+	
+	process(all)
+	begin
+		if reset = '1' then
+			lcd_clock <= '0';
+		elsif rising_edge(clock) then
+			lcd_clock <= not lcd_clock;
+		end if;
+	end process;
 	
 	process(all)
 	begin
@@ -202,82 +210,83 @@ begin
 			lcd_state <= 0;
 			lcd_count <= 25x"0";
 			pixel_y <= 9x"0";
-		elsif rising_edge(clock) then
-			case lcd_state is
-				when 0 =>
-					if lcd_count >= 6 then
-						lcd_state <= lcd_state + 1;
-						lcd_count <= 25x"0";
-					else
-						lcd_count <= lcd_count + 1;
-					end if;
-				when 1 | 3 | 14 | 16 | 20 | 22 => -- Delays
-					case lcd_state is
-						when 1 => counts := 200 * 50000; -- 200 millis
-						when 3 => counts := 50 * 50000; -- 50 millis
-						when 14 => counts := 150 * 50000; -- 150 millis
-						when 16 => counts := 500 * 50000; -- 500 millis
---						when 1 => counts := 3;--200 * 50000; -- 200 millis
---						when 3 => counts := 4;--50 * 50000; -- 50 millis
---						when 14 => counts := 5;--150 * 50000; -- 150 millis
---						when 16 => counts := 6;--500 * 50000; -- 500 millis
-						when 20 => counts := 320; -- Horizontal blank
-						when 22 => counts := 1600 * 810; -- Vertical blank
-						when others => counts := 0;
-					end case;
-					if lcd_count >= counts then
-						lcd_state <= lcd_state + 1;
-						lcd_count <= 25x"0";
-					else
-						lcd_count <= lcd_count + 1;
-					end if;
-				when 2 | 4 to 6 | 8 to 10 | 12 to 13 | 15 => -- 8-bit registers
-					if lcd_count >= 3 then
-						lcd_state <= lcd_state + 1;
-						lcd_count <= 25x"0";
-					else
-						lcd_count <= lcd_count + 1;
-					end if;
-				when 7 | 11 => -- 16-bit registers
-					if lcd_count >= 5 then
-						lcd_state <= lcd_state + 1;
-						lcd_count <= 25x"0";
-					else
-						lcd_count <= lcd_count + 1;
-					end if;
-				when 17 => -- Set address window
-					if lcd_count >= 19 then
-						lcd_state <= lcd_state + 1;
-						lcd_count <= 25x"0";
-					else
-						lcd_count <= lcd_count + 1;
-					end if;
-				when 18 => -- Start buffer write
-					if lcd_count >= 1 then
-						lcd_state <= lcd_state + 1;
-						lcd_count <= 25x"0";
-					else
-						lcd_count <= lcd_count + 1;
-					end if;
-				when 19 => -- Render line
-					if lcd_count >= 320 * 2 * 2 + 20 + 64 * 4 - 1 then
-						lcd_state <= lcd_state + 1;
-						lcd_count <= 25x"0";
-					else
-						lcd_count <= lcd_count + 1;
-					end if;
-				when 21 =>
-					if unsigned(pixel_y) + 1 >= 240 then
-						lcd_state <= lcd_state + 1;
-						pixel_y <= 9x"0";
-					else
-						lcd_state <= 19;
-						pixel_y <= std_logic_vector(unsigned(pixel_y) + 1);
-					end if;
-				when 23 => 
-					lcd_state <= 18;
-				when others => null;
-			end case;
+		elsif rising_edge(lcd_clock) then
+--			if rendering = '0' and lcd_state >= 18 then
+--				lcd_state <= 18;
+--				lcd_count <= 25x"0";
+--			else
+				case lcd_state is
+					when 0 =>
+						if lcd_count >= 6 then
+							lcd_state <= lcd_state + 1;
+							lcd_count <= 25x"0";
+						else
+							lcd_count <= lcd_count + 1;
+						end if;
+					when 1 | 3 | 14 | 16 | 20 | 22 => -- Delays
+						case lcd_state is
+							when 1 => counts := 200 * 50000; -- 200 millis
+							when 3 => counts := 50 * 50000; -- 50 millis
+							when 14 => counts := 150 * 50000; -- 150 millis
+							when 16 => counts := 500 * 50000; -- 500 millis
+							when 20 => counts := 320; -- Horizontal blank
+							when 22 => counts := 1600 * 810; -- Vertical blank
+							when others => counts := 0;
+						end case;
+						if lcd_count >= counts then
+							lcd_state <= lcd_state + 1;
+							lcd_count <= 25x"0";
+						else
+							lcd_count <= lcd_count + 1;
+						end if;
+					when 2 | 4 to 6 | 8 to 10 | 12 to 13 | 15 => -- 8-bit registers
+						if lcd_count >= 3 then
+							lcd_state <= lcd_state + 1;
+							lcd_count <= 25x"0";
+						else
+							lcd_count <= lcd_count + 1;
+						end if;
+					when 7 | 11 => -- 16-bit registers
+						if lcd_count >= 5 then
+							lcd_state <= lcd_state + 1;
+							lcd_count <= 25x"0";
+						else
+							lcd_count <= lcd_count + 1;
+						end if;
+					when 17 => -- Set address window
+						if lcd_count >= 19 then
+							lcd_state <= lcd_state + 1;
+							lcd_count <= 25x"0";
+						else
+							lcd_count <= lcd_count + 1;
+						end if;
+					when 18 => -- Start buffer write
+						if lcd_count >= 1 then
+							lcd_state <= lcd_state + 1;
+							lcd_count <= 25x"0";
+						else
+							lcd_count <= lcd_count + 1;
+						end if;
+					when 19 => -- Render line
+						if lcd_count >= 320 * 2 * 2 + 20 + 64 * 4 - 1 then
+							lcd_state <= lcd_state + 1;
+							lcd_count <= 25x"0";
+						else
+							lcd_count <= lcd_count + 1;
+						end if;
+					when 21 =>
+						if unsigned(pixel_y) + 1 >= 240 then
+							lcd_state <= lcd_state + 1;
+							pixel_y <= 9x"0";
+						else
+							lcd_state <= 19;
+							pixel_y <= std_logic_vector(unsigned(pixel_y) + 1);
+						end if;
+					when 23 => 
+						lcd_state <= 18;
+					when others => null;
+				end case;
+--			end if;
 		end if;
 	end process;
 end architecture;

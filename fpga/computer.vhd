@@ -77,6 +77,10 @@ architecture impl of computer is
 	end component;	
 
 	component microcontroller is
+		generic (
+			USE_APU : boolean;
+			USE_LCD : boolean
+		);
 		port (
 			address : in std_logic_vector(31 downto 0);
 			write_en : in std_logic;
@@ -208,10 +212,6 @@ architecture impl of computer is
 		);
 	end component;
 	
-	signal arduino : std_logic_vector(15 downto 0);
-	signal lcd_data : std_logic_vector(7 downto 0);
-	signal gpio_pins : std_logic_vector(35 downto 0);
-	
 	-- GPU signals
 	signal gpu_pixel : std_logic_vector(15 downto 0);
 	signal gpu_pixel_x : std_logic_vector(9 downto 0);
@@ -225,6 +225,7 @@ architecture impl of computer is
 	signal gpu_rendering : std_logic;
 	signal gpu_blanking : std_logic;
 	signal gpu_ticks : std_logic_vector(1 downto 0);
+	signal lcd_data : std_logic_vector(7 downto 0);
 	
 	-- Data bus
 	signal cpu_in : std_logic_vector(31 downto 0);
@@ -266,20 +267,7 @@ begin
 		else x"00000000";
 	
 	interrupts <= 3x"0" & int_timer & int_hblank & int_vblank & 2x"0";
-	
-	lcd_pins : if not USE_LCD generate
-		ARDUINO_IO(15 downto 0) <= arduino(15 downto 0);
-	else generate
-		ARDUINO_IO(9 downto 8) <= lcd_data(1 downto 0);
-		ARDUINO_IO(7 downto 2) <= lcd_data(7 downto 2);
-		ARDUINO_IO(13 downto 10) <= arduino(13 downto 10);
-	end generate;
-	
-	apu_pins : if not USE_APU generate
-		GPIO(35 downto 33) <= gpio_pins(35 downto 33);
-	end generate;
-	GPIO(32 downto 0) <= gpio_pins(32 downto 0);
-	
+		
 	prcoessor : cpu
 		port map (
 			clock => clock,
@@ -306,6 +294,10 @@ begin
 		);
 	
 	micro : microcontroller
+		generic map (
+			USE_APU => USE_APU,
+			USE_LCD => USE_LCD
+		)
 		port map (
 			address => address,
 			write_en => write_en,
@@ -317,8 +309,8 @@ begin
 			timer_int => int_timer,
 			buttons => KEY,
 			switches => SW,
-			gpio => gpio_pins,
-			arduino => arduino,
+			gpio => GPIO,
+			arduino => ARDUINO_IO,
 			leds => LEDR,
 			hex0 => HEX0,
 			hex1 => HEX1,
@@ -366,6 +358,10 @@ begin
 	end generate;
 		
 	display_driver : if USE_LCD generate
+		ARDUINO_IO(9 downto 8) <= lcd_data(1 downto 0);
+		ARDUINO_IO(7 downto 2) <= lcd_data(7 downto 2);
+		ARDUINO_IO(0) <= '1';
+	
 		lcd : lcd_driver
 			port map (
 				clock => MAX10_CLK1_50,

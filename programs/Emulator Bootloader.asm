@@ -3,7 +3,7 @@
     include "libraries/Kernel.asm"
 
     align 4
-    program: bin "build/Blink.img"
+    program: bin "build/C Snake.img"
     program_end: db 0
 
 entry:

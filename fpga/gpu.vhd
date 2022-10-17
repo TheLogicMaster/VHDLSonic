@@ -46,6 +46,11 @@ architecture impl of gpu is
 		return rgb(23 downto 19) & rgb(15 downto 10) & rgb(7 downto 3);
 	end function;
 	
+	function rgb_565_to_888(rgb : std_logic_vector(15 downto 0)) return std_logic_vector is
+	begin
+		return rgb(15 downto 11) & 3x"0" & rgb(10 downto 5) & 2x"0" & rgb(4 downto 0) & 3x"0";
+	end function;
+	
 	function reverse_nibbles(value : std_logic_vector(31 downto 0)) return std_logic_vector is
 	begin
 		return value(3 downto 0) & value(7 downto 4) & value(11 downto 8) & value(15 downto 12) 
@@ -67,8 +72,8 @@ architecture impl of gpu is
 	signal render : boolean;
 	signal h_scroll : integer range 0 to 511;
 	signal v_scroll : integer range 0 to 511;
-	signal window_x : integer range 0 to 511;
-	signal window_y : integer range 0 to 511;
+	signal window_x : integer range -320 to 320;
+	signal window_y : integer range -240 to 240;
 	signal palette : palette_array;
 	
 	-- Sprite RAM signals
@@ -77,6 +82,7 @@ architecture impl of gpu is
 	signal sprite_write : std_logic;
 	signal sprite_out : std_logic_vector(31 downto 0);
 	signal sprite_data : sprite_type;
+	signal sprite_data_mapped : std_logic_vector(31 downto 0);
 	
 	-- Sprite cache RAM signals
 	signal sprite_cache_a_addr : std_logic_vector(5 downto 0);
@@ -102,22 +108,32 @@ architecture impl of gpu is
 	signal bg_write : std_logic;
 	signal bg_out : std_logic_vector(7 downto 0);
 	signal bg_data : integer range 0 to 255;
+	signal bg_data_mapped : std_logic_vector(7 downto 0);
 	
 	-- Window RAM signals
-	signal win_read_addr : std_logic_vector(9 downto 0);
-	signal win_write_addr : std_logic_vector(9 downto 0);
+	signal win_read_addr : std_logic_vector(10 downto 0);
+	signal win_write_addr : std_logic_vector(10 downto 0);
 	signal win_write : std_logic;
 	signal win_out : std_logic_vector(7 downto 0);
 	signal win_data : integer range 0 to 255;
+	signal win_data_mapped : std_logic_vector(7 downto 0);
 	
 	-- Other signals
 	signal addr_index : integer;
 	signal bg_palette_index : integer range 0 to 15;
+	signal tile_sprite_addr : std_logic_vector(7 downto 0);
+	signal win_palette_index : integer range 0 to 15;
 	signal sprite_data_prev : sprite_type;
 	signal bg_x_1 : unsigned(9 downto 0);
 	signal bg_y_1 : unsigned(8 downto 0);
 	signal bg_x_2 : unsigned(9 downto 0);
 	signal bg_y_2 : unsigned(8 downto 0);
+	signal win_x_1 : unsigned(9 downto 0);
+	signal win_y_1 : unsigned(8 downto 0);
+	signal win_x_2 : unsigned(9 downto 0);
+	signal win_y_2 : unsigned(8 downto 0);
+	signal win_x_3 : unsigned(9 downto 0);
+	signal win_y_3 : unsigned(8 downto 0);
 begin
 	rendering <= '1' when render else '0';
 
@@ -136,12 +152,12 @@ begin
 	tile_a_write <= '1' when addr_index >= 21 and addr_index <= 2068 and write_en = '1' else '0';
 	
 	-- Sprite tile reading logic
-	-- Todo: Convert to process
-	tile_b_addr <= 
+	tile_sprite_addr <= 
 		std_logic_vector(to_unsigned(sprite_data.first_tile, 8)) when ticks(1) = '0' and to_integer(unsigned(pixel_y)) + 16 - sprite_data.y < 8
 		else std_logic_vector(to_unsigned(sprite_data.first_tile + 1, 8)) when ticks(1) = '1' and to_integer(unsigned(pixel_y)) + 16 - sprite_data.y < 8
 		else std_logic_vector(to_unsigned(sprite_data.first_tile + 2, 8)) when ticks(1) = '0' and to_integer(unsigned(pixel_y)) + 16 - sprite_data.y >= 8
 		else std_logic_vector(to_unsigned(sprite_data.first_tile + 3, 8));
+	tile_b_addr <= tile_sprite_addr when sprite_cache_write or sprite_cache_clear else win_out;
 	
 	-- Background data writing and reading logic
 	bg_write_addr <= std_logic_vector(to_unsigned(addr_index - 2069, 12));
@@ -150,14 +166,18 @@ begin
 	bg_data <= to_integer(unsigned(bg_out));
 	
 	-- Window data writing and reading logic
-	win_write_addr <= std_logic_vector(to_unsigned(addr_index - 6165, 10));
+	win_write_addr <= std_logic_vector(to_unsigned(addr_index - 6165, 11));
 	win_write <= '1' when addr_index >= 6165 and addr_index <= 7364 and write_en = '1' else '0';
 	win_data <= to_integer(unsigned(win_out));
+	win_read_addr <= std_logic_vector(resize(((unsigned(bg_y) - window_y) / 8) * 40 + (unsigned(bg_x) - window_x) / 8, 11));
 	
 	-- Graphics layer combining logic
 	bg_palette_index <= to_integer(shift_right(unsigned(tile_a_out), to_integer(28 - ((unsigned(pixel_x) + h_scroll) mod 8) * 4)) and x"0000000F");
+	win_palette_index <= to_integer(shift_right(unsigned(tile_b_out), to_integer(256 - 4 - ((unsigned(pixel_x) - unsigned(to_signed(window_x, 10))) mod 8 + (7 - ((unsigned(pixel_y) - unsigned(to_signed(window_y, 9))) mod 8)) * 8) * 4)) and 256x"F");
 	pixel <=
-		palette(sprite_cache_data) when sprite_cache_data > 0
+		palette(win_palette_index) when false and to_integer(unsigned(pixel_x)) - window_x >= 0 and to_integer(unsigned(pixel_x)) - window_x < 320 -- Caused glitches...
+			and to_integer(unsigned(pixel_y)) - window_y >= 0 and to_integer(unsigned(pixel_y)) - window_y < 240
+		else palette(sprite_cache_data) when sprite_cache_data > 0
 		else palette(bg_palette_index);
 	
 	-- Background rendering pipeline logic
@@ -165,9 +185,15 @@ begin
 	begin
 		bg_x_1 <= unsigned(bg_x) + h_scroll;
 		bg_y_1 <= unsigned(bg_y) + v_scroll;
+		win_x_1 <= unsigned(bg_x);
+		win_y_1 <= unsigned(bg_y);
 		if rising_edge(clock) then
 			bg_x_2 <= bg_x_1;
 			bg_y_2 <= bg_y_1;
+			win_x_2 <= win_x_1;
+			win_y_2 <= win_y_1;
+			win_x_3 <= win_x_2;
+			win_y_3 <= win_y_2;
 		end if;
 	end process;
 
@@ -175,7 +201,6 @@ begin
 	-- Todo: Sprite mirroring
 	process(all)
 		variable y : integer range 0 to 511;
-		variable sprite_x : integer range 0 to 15;
 		variable sprite_y : integer range 0 to 15;
 		variable tile_offset : integer range 0 to 255;
 		variable sprite : sprite_type;
@@ -187,11 +212,6 @@ begin
 		sprite_cache_data <= to_integer(resize(shift_right(unsigned(sprite_cache_a_out), (to_integer(unsigned(pixel_x)) mod 8) * 4), 4));
 	
 		sprite := sprite_data_prev;
-		if ticks(0) = '0' then
-			sprite_x := 8;
-		else
-			sprite_x := 0;
-		end if;
 		
 		y := to_integer(unsigned(pixel_y)) + 16;
 		sprite_y := to_integer(unsigned(pixel_y)) + 16 - sprite.y;
@@ -226,7 +246,7 @@ begin
 				end if;
 			end loop;
 			
-			if ticks(0) = '0' then
+			if ticks(0) = '1' then
 				if base_addr >= 0 then
 					sprite_cache_a_write <= '1';
 				else
@@ -264,32 +284,42 @@ begin
 	
 	sprite_ram : altsyncram
 		generic map (
-			address_aclr_b => "NONE",
 			address_reg_b => "CLOCK0",
 			clock_enable_input_a => "BYPASS",
 			clock_enable_input_b => "BYPASS",
+			clock_enable_output_a => "BYPASS",
 			clock_enable_output_b => "BYPASS",
+			indata_reg_b => "CLOCK0",
 			intended_device_family => "MAX 10",
 			lpm_type => "altsyncram",
 			numwords_a => 64,
 			numwords_b => 64,
-			operation_mode => "DUAL_PORT",
+			operation_mode => "BIDIR_DUAL_PORT",
+			outdata_aclr_a => "NONE",
 			outdata_aclr_b => "NONE",
+			outdata_reg_a => "UNREGISTERED",
 			outdata_reg_b => "UNREGISTERED",
 			power_up_uninitialized => "FALSE",
 			read_during_write_mode_mixed_ports => "OLD_DATA",
+			read_during_write_mode_port_a => "NEW_DATA_WITH_NBE_READ",
+			read_during_write_mode_port_b => "NEW_DATA_WITH_NBE_READ",
 			widthad_a => 6,
 			widthad_b => 6,
 			width_a => 32,
 			width_b => 32,
-			width_byteena_a => 1
+			width_byteena_a => 1,
+			width_byteena_b => 1,
+			wrcontrol_wraddress_reg_b => "CLOCK0"
 		)
 		port map (
 			address_a => sprite_write_addr,
 			address_b => sprite_read_addr,
 			clock0 => clock,
 			data_a => data_in,
+			data_b => 32x"0",
 			wren_a => sprite_write,
+			wren_b => '0',
+			q_a => sprite_data_mapped,
 			q_b => sprite_out
 		);
 	
@@ -367,7 +397,7 @@ begin
 			address_a => tile_a_addr,
 			address_b => tile_b_addr,
 			clock0 => clock,
-			data_a => data_in(31 downto 0),
+			data_a => data_in,
 			wren_a => tile_a_write,
 			q_a => tile_a_out,
 			q_b => tile_b_out
@@ -375,86 +405,111 @@ begin
 		
 	bg_ram : altsyncram
 		generic map (
-			address_aclr_b => "NONE",
 			address_reg_b => "CLOCK0",
 			clock_enable_input_a => "BYPASS",
 			clock_enable_input_b => "BYPASS",
+			clock_enable_output_a => "BYPASS",
 			clock_enable_output_b => "BYPASS",
+			indata_reg_b => "CLOCK0",
 			intended_device_family => "MAX 10",
 			lpm_type => "altsyncram",
 			numwords_a => 4096,
 			numwords_b => 4096,
-			operation_mode => "DUAL_PORT",
+			operation_mode => "BIDIR_DUAL_PORT",
+			outdata_aclr_a => "NONE",
 			outdata_aclr_b => "NONE",
+			outdata_reg_a => "UNREGISTERED",
 			outdata_reg_b => "UNREGISTERED",
 			power_up_uninitialized => "FALSE",
 			read_during_write_mode_mixed_ports => "OLD_DATA",
+			read_during_write_mode_port_a => "NEW_DATA_WITH_NBE_READ",
+			read_during_write_mode_port_b => "NEW_DATA_WITH_NBE_READ",
 			widthad_a => 12,
 			widthad_b => 12,
 			width_a => 8,
 			width_b => 8,
-			width_byteena_a => 1
+			width_byteena_a => 1,
+			width_byteena_b => 1,
+			wrcontrol_wraddress_reg_b => "CLOCK0"
 		)
 		port map (
 			address_a => bg_write_addr,
 			address_b => bg_read_addr,
 			clock0 => clock,
 			data_a => data_in(7 downto 0),
+			data_b => x"00",
 			wren_a => bg_write,
+			wren_b => '0',
+			q_a => bg_data_mapped,
 			q_b => bg_out
 		);
 		
 	win_ram : altsyncram
 		generic map (
-			address_aclr_b => "NONE",
 			address_reg_b => "CLOCK0",
 			clock_enable_input_a => "BYPASS",
 			clock_enable_input_b => "BYPASS",
+			clock_enable_output_a => "BYPASS",
 			clock_enable_output_b => "BYPASS",
+			indata_reg_b => "CLOCK0",
 			intended_device_family => "MAX 10",
 			lpm_type => "altsyncram",
-			numwords_a => 1024,
-			numwords_b => 1024,
-			operation_mode => "DUAL_PORT",
+			numwords_a => 2048,
+			numwords_b => 2048,
+			operation_mode => "BIDIR_DUAL_PORT",
+			outdata_aclr_a => "NONE",
 			outdata_aclr_b => "NONE",
+			outdata_reg_a => "UNREGISTERED",
 			outdata_reg_b => "UNREGISTERED",
 			power_up_uninitialized => "FALSE",
 			read_during_write_mode_mixed_ports => "OLD_DATA",
-			widthad_a => 10,
-			widthad_b => 10,
+			read_during_write_mode_port_a => "NEW_DATA_WITH_NBE_READ",
+			read_during_write_mode_port_b => "NEW_DATA_WITH_NBE_READ",
+			widthad_a => 11,
+			widthad_b => 11,
 			width_a => 8,
 			width_b => 8,
-			width_byteena_a => 1
+			width_byteena_a => 1,
+			width_byteena_b => 1,
+			wrcontrol_wraddress_reg_b => "CLOCK0"
 		)
 		port map (
 			address_a => win_write_addr,
 			address_b => win_read_addr,
 			clock0 => clock,
 			data_a => data_in(7 downto 0),
+			data_b => x"00",
 			wren_a => win_write,
+			wren_b => '0',
+			q_a => win_data_mapped,
 			q_b => win_out
 		);
 		
 	-- Register read logic
 	process(all)
-		variable index : integer;
-	begin
-		index := (to_integer(unsigned(address)) - 16#30000#) / 4;
-		
-		case index is
+	begin		
+		case addr_index is
 			when 0 => 
 				if render then
 					data_out <= x"00000001";
 				else
 					data_out <= x"00000000";
 				end if;
+			when 1 => data_out <= std_logic_vector(to_unsigned(h_scroll, 32));
+			when 2 => data_out <= std_logic_vector(to_unsigned(v_scroll, 32));
+			when 3 => data_out <= std_logic_vector(to_signed(window_x, 32));
+			when 4 => data_out <= std_logic_vector(to_signed(window_y, 32));
+			when 5 to 20 => data_out <= x"00" & rgb_565_to_888(palette(addr_index - 5));
+			when 21 to 2068 => data_out <= tile_a_out;
+			when 2069 to 6164 => data_out <= 24x"0" & bg_data_mapped;
+			when 6165 to 7364 => data_out <= 24x"0" & win_data_mapped;
+			when 7365 to 7428 => data_out <= sprite_data_mapped;
 			when others => data_out <= x"00000000";
 		end case;
 	end process;
 	
 	-- Register write logic
 	process(all)
-		variable index : integer;
 		variable data : unsigned(31 downto 0);
 		variable tile : integer range 0 to 255;
 	begin
@@ -463,7 +518,7 @@ begin
 			h_scroll <= 0;
 			v_scroll <= 0;
 			window_x <= 0;
-			window_y <= 0;
+			window_y <= 240;
 			palette <= (
 				0 => rgb_888_to_565(x"000000"),
 				1 => rgb_888_to_565(x"005500"),
@@ -483,16 +538,15 @@ begin
 				15 => rgb_888_to_565(x"ffffff")
 			);
 		elsif rising_edge(clock) and write_en = '1' then
-			index := (to_integer(unsigned(address)) - 16#30000#) / 4;
 			data := unsigned(data_in);
 		
-			case index is
+			case addr_index is
 				when 0 => render <= data /= 0;
 				when 1 => h_scroll <= to_integer(data);
 				when 2 => v_scroll <= to_integer(data);
-				when 3 => window_x <= to_integer(data);
-				when 4 => window_y <= to_integer(data);
-				when 5 to 20 => palette(index - 5) <= rgb_888_to_565(data_in(23 downto 0));
+				when 3 => window_x <= to_integer(signed(data));
+				when 4 => window_y <= to_integer(signed(data));
+				when 5 to 20 => palette(addr_index - 5) <= rgb_888_to_565(data_in(23 downto 0));
 				when others => null;
 			end case;
 		end if;

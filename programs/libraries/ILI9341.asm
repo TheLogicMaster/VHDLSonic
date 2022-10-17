@@ -31,10 +31,14 @@
     def ili9341_madctl_bgr=$08
     def ili9341_madctl_mh=$04
 
-    def ili9341_rd=$20
-    def ili9341_wr=$24
-    def ili9341_cd=$28
-    def ili9341_cs=$2C
+;    def ili9341_rd=$20
+;    def ili9341_wr=$24
+;    def ili9341_cd=$28
+;    def ili9341_cs=$2C
+    def ili9341_rd=$00
+    def ili9341_wr=$04
+    def ili9341_cd=$38
+    def ili9341_cs=$3C
 
     def ili9341_cd_command=0
     def ili9341_cd_data=1
@@ -551,8 +555,30 @@ ili9341_write_8:
     push r1
     push r2
 
+;; Set data line values
+;    ldr r2,0
+;ili9341_write_8_loop_:
+;    tfr r1,r0
+;    and r1,$01
+;    str r1,r2,{arduino}
+;    lsr r0,1
+;    add r2,4
+;    cmp r2,$20
+;    bne ili9341_write_8_loop_
+
 ; Set data line values
-    ldr r2,0
+    ldr r2,$20
+    tfr r1,r0
+    and r1,$01
+    str r1,r2,{arduino}
+    lsr r0,1
+    add r2,4
+    tfr r1,r0
+    and r1,$01
+    str r1,r2,{arduino}
+    lsr r0,1
+
+    ldr r2,8
 ili9341_write_8_loop_:
     tfr r1,r0
     and r1,$01
@@ -580,11 +606,11 @@ ili9341_write_8_loop_:
 ili9341_set_data_dir:
     push r1
 
-    ldr r1,0
+    ldr r1,8
 ili9341_set_data_dir_loop_:
     str r0,r1,{arduino_modes}
     add r1,4
-    cmp r1,$20
+    cmp r1,$28
     bne ili9341_set_data_dir_loop_
 
     pop r1

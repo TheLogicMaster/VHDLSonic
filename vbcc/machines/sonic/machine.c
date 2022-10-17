@@ -103,7 +103,7 @@ static char memory_suffixes[5] = {'?', 'b', 'w', '?', 'r'};
 // Interrupts
 #define INTERRUPT_COUNT 8
 static char *interrupt_names[INTERRUPT_COUNT] = {
-        "reset", "exception", "vblank", "hblank", "interrupt4", "interrupt5", "interrupt6", "interrupt7"
+        "reset", "exception", "vblank", "hblank", "timer", "interrupt5", "interrupt6", "interrupt7"
 };
 static int interrupts[8] = {};
 
@@ -1183,13 +1183,13 @@ void cleanup_cg(FILE *f) {
 
     emit(f, "_initialize:\n");
 
-    emit(f, "; Clear memory\n");
-    emit(f, "\tldr x,$18000\n");
-    emit(f, "\tldr r0,0\n");
-    emit(f, "_clear_mem_loop:\n");
-    emit(f, "\tstr r0,x++\n");
-    emit(f, "\tcmp x,$20000\n");
-    emit(f, "\tbne _clear_mem_loop\n\n");
+//     emit(f, "; Clear memory\n");
+//     emit(f, "\tldr x,$18000\n");
+//     emit(f, "\tldr r0,0\n");
+//     emit(f, "_clear_mem_loop:\n");
+//     emit(f, "\tstr r0,x++\n");
+//     emit(f, "\tcmp x,$20000\n");
+//     emit(f, "\tbne _clear_mem_loop\n\n");
 
     emit(f, "; Static variable initialization\n");
     char *previousVariable = NULL;

@@ -2,9 +2,9 @@
 
 ; SPI serial utilities
 
-    def spi_clk=$30
-    def spi_miso=$34
-    def spi_mosi=$38
+    ifndef spi_clk=40
+    ifndef spi_miso=44
+    ifndef spi_mosi=48
 
     include "Sonic.asm"
 
